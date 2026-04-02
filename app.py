@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import streamlit.components.v1 as components
-from streamlit_webrtc import webrtc_streamer
 
 # --- 1. CONFIGURATION & THEME ---
 st.set_page_config(page_title="Hosp-Net Pro | Batna", layout="wide")
