@@ -89,8 +89,33 @@ with right_col:
     df = pd.DataFrame(data)
     st.dataframe(df, use_container_width=True, hide_index=True)
 
-# --- 6. FOOTER ---
+# --- 6. GÉNÉRATION DU RAPPORT (FOOTER) ---
 st.divider()
-if st.button("📑 Generate Professional Project Report"):
+
+# Préparation du contenu du rapport en français
+contenu_rapport = f"""
+RAPPORT D'INFRASTRUCTURE RÉSEAU - EHS BATNA
+Ingénieur responsable : Boureghda Tarek
+Date : {pd.Timestamp.now().strftime('%d/%m/%Y')}
+-----------------------------------------
+ÉTAT D'AVANCEMENT GLOBAL :
+- Rez-de-chaussée : 100% (17/17 terminés)
+- 1er Étage : 15% (3/19) - Prochaine étape : Cablage
+- Testeur I-POOK : 47% (17/36 prises vérifiées)
+-----------------------------------------
+DÉTAILS DES TÂCHES (ROADMAP) :
+{df.to_string(index=False)}
+-----------------------------------------
+Généré via l'application Smgestion.
+"""
+
+# Création du bouton de téléchargement
+st.download_button(
+    label="📑 Télécharger le Rapport Professionnel (PDF/TXT)",
+    data=contenu_rapport,
+    file_name="Rapport_Reseau_EHS_Batna.txt",
+    mime="text/plain"
+)
+
+if st.button("✨ Afficher la Célébration"):
     st.balloons()
-    st.write("Report generated for Hospital Administration.")
