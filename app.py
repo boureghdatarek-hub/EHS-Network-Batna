@@ -38,17 +38,19 @@ col4.metric("Active Team", "2", "Online")
 
 st.divider()
 
-# --- 5. INTERCOM & WORK ZONE ---
-left_col, right_col = st.columns([1, 2])
+# A simple, reliable replacement for Sunday
+st.subheader("📢 Digital Command (Talkie-Text)")
+msg = st.text_input("Send voice message to Djamel:")
 
-with left_col:
-    st.subheader("📟 Intercom (Walkie-Talkie)")
-    # WebRTC for real-time voice
-    webrtc_streamer(
-        key="intercom",
-        media_stream_constraints={"video": False, "audio": True},
-        rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
-    )
+if st.button("Send & Shout"):
+    st.success(f"Sent: {msg}")
+    # This uses a simple Javascript trick to make the phone talk
+    st.components.v1.html(f"""
+        <script>
+        var msg = new SpeechSynthesisUtterance('{msg}');
+        window.speechSynthesis.speak(msg);
+        </script>
+    """, height=0)
     
     st.subheader("📝 Log New Progress")
     with st.form("progress_form", clear_on_submit=True):
