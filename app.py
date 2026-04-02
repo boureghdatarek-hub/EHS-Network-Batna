@@ -1,10 +1,10 @@
 import streamlit as st
 import pandas as pd
 
-# --- 1. CONFIGURATION ---
-st.set_page_config(page_title="EHS Batna - Infrastructure & Maintenance", layout="wide")
+# --- 1. CONFIGURATION (Unique et en premier) ---
+st.set_page_config(page_title="EHS Batna IT - Live", layout="wide")
 
-# --- 2. INITIALISATION DES DONNÉES ---
+# --- 2. INITIALISATION DES DONNÉES (Session State) ---
 if "df_infra" not in st.session_state:
     st.session_state.df_infra = pd.DataFrame({
         "Étage": ["RDC", "1er Étage", "RDC"],
@@ -23,7 +23,18 @@ if "equipe" not in st.session_state:
         {"Nom": "Mr. BOUREGHDA Tarek", "Grade": "Technicien Supérieur en informatique"}
     ]
 
-# --- 3. SÉCURITÉ ---
+if "notifications" not in st.session_state:
+    st.session_state.notifications = ["Système prêt pour l'intervention. 🚀"]
+
+# --- 3. FONCTIONS UTILES ---
+def add_notification(user, action, bureau):
+    timestamp = pd.Timestamp.now().strftime('%H:%M')
+    msg = f"🔔 [{timestamp}] {user} a {action} | Bureau: {bureau}"
+    st.session_state.notifications.insert(0, msg)
+    if len(st.session_state.notifications) > 5:
+        st.session_state.notifications.pop()
+
+# --- 4. SÉCURITÉ ---
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 
@@ -36,96 +47,98 @@ if not st.session_state["authenticated"]:
     else:
         st.stop()
 
-# --- 4. ENTÊTE DU PROJET ---
-st.title("🏥 Dashboard Infrastructure IT - EHS Batna")
+# --- 5. ENTÊTE & NOTIFICATIONS LIVE ---
+st.title("🏥 Dashboard IT & Infrastructure - EHS Batna")
 
+# Affichage des notifications en haut
+with st.expander("📢 Journal d'activité de l'équipe", expanded=True):
+    for n in st.session_state.notifications:
+        st.caption(n)
+
+st.divider()
+
+# Identification de l'utilisateur actif
+equipe_noms = [m['Nom'] for m in st.session_state.equipe]
+user_active = st.sidebar.selectbox("👤 Session de :", equipe_noms)
+
+# --- 6. GESTION DE L'ÉQUIPE ---
 with st.expander("👥 Membres de l'Équipe & Grades"):
     col_a, col_b = st.columns([2, 1])
     with col_a:
         for member in st.session_state.equipe:
             st.info(f"👤 **{member['Nom']}** | {member['Grade']}")
     with col_b:
-        new_name = st.text_input("Nouveau membre")
-        new_grade = st.text_input("Grade du membre")
+        new_name = st.text_input("Nom du nouveau membre")
+        new_grade = st.text_input("Grade")
         if st.button("Ajouter à l'équipe"):
             if new_name and new_grade:
                 st.session_state.equipe.append({"Nom": new_name, "Grade": new_grade})
                 st.rerun()
 
-st.divider()
-
-# --- 5. SAISIE DES DONNÉES (RÉSEAU + MATÉRIEL) ---
-st.subheader("🛠️ Saisie Terrain (Réseau & Monitoring)")
+# --- 7. SAISIE TERRAIN (FORMULAIRE) ---
+st.subheader("🛠️ Nouvelle Saisie / Mise à jour")
 with st.form("global_form", clear_on_submit=True):
     c1, c2, c3 = st.columns(3)
     with c1:
         etage = st.selectbox("📍 Étage", ["RDC", "1er Étage", "2ème Étage"])
         bureau = st.text_input("🏢 Bureau / Service")
-        materiel = st.text_area("🖥️ Matériel Info (ex: 3 PC, 1 Canon 6030)")
+        materiel = st.text_area("🖥️ Matériel Info")
     with c2:
         statut_net = st.selectbox("📡 Projet Réseau", ["En attente ⏳", "Goulotte 🏗️", "Câblage 🔌", "Prise Connectée 🔌", "Vérifié ✅"])
         cisco = st.number_input("🔌 Port Cisco", 1, 48)
         vlan = st.number_input("🔢 VLAN", 10, 100, step=10)
     with c3:
         statut_mat = st.radio("⚙️ État Matériel", ["Opérationnel ✅", "En Panne ❌"])
-        maintenance = st.text_area("⚠️ Détails Panne", value="RAS")
+        maintenance = st.text_area("⚠️ Détails Maintenance", value="RAS")
     
-    if st.form_submit_button("💾 Enregistrer toutes les données"):
+    if st.form_submit_button("💾 Enregistrer et Notifier"):
         new_entry = {
             "Étage": etage, "Bureau / Service": bureau, "Statut Câblage": statut_net,
             "Port Switch Cisco": cisco, "VLAN": vlan, "Matériel (PC/Imprimante)": materiel,
             "État Matériel": statut_mat, "Détails Maintenance": maintenance
         }
         st.session_state.df_infra = pd.concat([st.session_state.df_infra, pd.DataFrame([new_entry])], ignore_index=True)
-        st.success(f"Mise à jour effectuée pour le bureau {bureau}")
+        
+        # Déclencher la notification
+        add_notification(user_active, "ajouté/modifié un bureau", bureau)
+        st.toast(f"Notification envoyée par {user_active} !")
         st.rerun()
 
 st.divider()
 
-# --- 6. VISUALISATION DES DONNÉES ---
-st.subheader("🖥️ Monitoring Global (Réseau & Matériel)")
+# --- 8. VISUALISATION ÉDITABLE ---
+st.subheader("🖥️ Monitoring Global (Édition en direct)")
 
-# Filtrage par étage pour la clarté
 filter_etage = st.multiselect("Filtrer par étage :", ["RDC", "1er Étage", "2ème Étage"], default=["RDC", "1er Étage"])
-df_display = st.session_state.df_infra[st.session_state.df_infra["Étage"].isin(filter_etage)]
+df_filtered = st.session_state.df_infra[st.session_state.df_infra["Étage"].isin(filter_etage)]
 
 def highlight_issues(val):
     if val == "En Panne ❌": return 'background-color: #721c24'
-    if val == "En attente ⏳": return 'background-color: #3e3e3e'
     return ''
 
-st.dataframe(
-    df_display.style.map(highlight_issues, subset=['État Matériel', 'Statut Câblage']),
+# Utilisation de data_editor pour que l'équipe puisse modifier en direct
+edited_df = st.data_editor(
+    df_filtered.style.map(highlight_issues, subset=['État Matériel']),
     use_container_width=True,
     hide_index=True
 )
 
-# --- 7. GÉNÉRATION DU RAPPORT ADMINISTRATIF ---
+if st.button("💾 Valider les modifications du tableau et Alerter"):
+    st.session_state.df_infra.update(edited_df)
+    add_notification(user_active, "modifié le tableau de monitoring", "Multi-Bureaux")
+    st.success("Modifications enregistrées !")
+
+# --- 9. RAPPORT ---
 st.divider()
 equipe_str = "\n".join([f"- {m['Nom']} : {m['Grade']}" for m in st.session_state.equipe])
-
 rapport_final = f"""
 ============================================================
         RAPPORT TECHNIQUE INFRASTRUCTURE - EHS BATNA
 ============================================================
 Date : {pd.Timestamp.now().strftime('%d/%m/%Y')}
-
-ÉQUIPE TECHNIQUE :
-{equipe_str}
-
-------------------------------------------------------------
-DÉTAILS DES INSTALLATIONS (PAR ÉTAGE) :
+ÉQUIPE : {equipe_str}
 ------------------------------------------------------------
 {st.session_state.df_infra.to_string(index=False)}
-
-------------------------------------------------------------
-FIN DU RAPPORT
 ============================================================
 """
-
-st.download_button(
-    label="📥 Télécharger le Rapport Administratif Complet",
-    data=rapport_final,
-    file_name=f"EHS_Batna_Final_Report_{pd.Timestamp.now().strftime('%d_%m_%Y')}.txt",
-    mime="text/plain"
-)
+st.download_button("📥 Télécharger le Rapport Administratif", rapport_final, file_name="Rapport_EHS.txt")
