@@ -4,20 +4,20 @@ import pandas as pd
 # --- 1. CONFIGURATION ---
 st.set_page_config(page_title="EHS Batna - Management IT", layout="wide")
 
-# --- 2. INITIALISATION DES BASES DE DONNÉES ---
+# --- 2. INITIALISATION DES DONNÉES ---
 if "df_inventaire" not in st.session_state:
     st.session_state.df_inventaire = pd.DataFrame({
         "Bureau": ["Direction", "S.I.P"],
         "Matériel": ["PC Dell + HP Laser", "5 PC + 2 Epson"],
         "Statut Réseau": ["Terminé ✅", "En cours 🏗️"],
         "État Matériel": ["Opérationnel ✅", "En Panne ❌"],
-        "Détails Panne": ["RAS", "Imprimante : Bourrage papier fréquent"]
+        "Détails Panne": ["RAS", "Imprimante : Bourrage papier"]
     })
 
 if "equipe" not in st.session_state:
     st.session_state.equipe = [
-        {"Nom": "Mr. MERZOUG Djamel", "Grade": "Ingénieur en Chef en informatique", "Rôle": "Superviseur"},
-        {"Nom": "Mr. BOUREGHDA Tarek", "Grade": "Technicien Supérieur en informatique", "Rôle": "Réalisateur"}
+        {"Nom": "Mr. MERZOUG Djamel", "Grade": "Ingénieur en Chef en informatique"},
+        {"Nom": "Mr. BOUREGHDA Tarek", "Grade": "Technicien Supérieur en informatique"}
     ]
 
 # --- 3. SÉCURITÉ ---
@@ -33,33 +33,32 @@ if not st.session_state["authenticated"]:
     else:
         st.stop()
 
-# --- 4. NAVIGATION & ÉQUIPE ---
+# --- 4. ENTÊTE & ÉQUIPE ---
 st.title("🏥 Gestion de Projet IT - EHS Batna")
 
 with st.expander("👥 Membres de l'Équipe Projet"):
     col_a, col_b = st.columns([2, 1])
     with col_a:
         for member in st.session_state.equipe:
-            st.write(f"👤 **{member['Nom']}** - {member['Grade']} ({member['Rôle']})")
+            st.write(f"👤 **{member['Nom']}** - {member['Grade']}")
     with col_b:
-        st.write("➕ **Ajouter un membre**")
         new_name = st.text_input("Nom & Prénom")
-        new_grade = st.text_input("Grade / Spécialité")
+        new_grade = st.text_input("Grade")
         if st.button("Ajouter à l'équipe"):
             if new_name and new_grade:
-                st.session_state.equipe.append({"Nom": new_name, "Grade": new_grade, "Rôle": "Collaborateur"})
+                st.session_state.equipe.append({"Nom": new_name, "Grade": new_grade})
                 st.rerun()
 
 st.divider()
 
-# --- 5. INTERFACE DE TRAVAIL ---
+# --- 5. INTERFACE DE SAISIE ---
 left_col, right_col = st.columns([1, 1.5])
 
 with left_col:
     st.subheader("🛠️ Saisie Terrain")
     with st.form("main_form", clear_on_submit=True):
         bureau = st.text_input("Bureau / Service")
-        materiel = st.text_input("Équipements (PC, Imprimantes)")
+        materiel = st.text_input("Équipements")
         reseau = st.selectbox("État Réseau", ["En attente ⏳", "Goulotte posée 🏗️", "Câblage 🔌", "Terminé ✅"])
         etat_mat = st.radio("État Matériel", ["Opérationnel ✅", "En Panne ❌"])
         panne = st.text_area("Détails si panne", value="RAS")
@@ -71,47 +70,46 @@ with left_col:
                 "Détails Panne": panne
             }
             st.session_state.df_inventaire = pd.concat([st.session_state.df_inventaire, pd.DataFrame([new_row])], ignore_index=True)
-            st.success("Données synchronisées !")
+            st.success("Données enregistrées !")
             st.rerun()
 
 with right_col:
-    st.subheader("🖥️ Tableau de Bord (Monitoring)")
-    def color_status(val):
-        return 'background-color: #721c24' if val == "En Panne ❌" else ''
+    st.subheader("🖥️ Monitoring Réseau & Matériel")
     
+    # --- LA CORRECTION DE L'ERREUR EST ICI ---
+    def color_status(val):
+        color = '#721c24' if val == "En Panne ❌" else ''
+        return f'background-color: {color}'
+
+    # Utilisation de .map au lieu de .applymap pour éviter l'AttributeError
     st.dataframe(
-        st.session_state.df_inventaire.style.applymap(color_status, subset=['État Matériel']),
-        use_container_width=True, hide_index=True
+        st.session_state.df_inventaire.style.map(color_status, subset=['État Matériel']),
+        use_container_width=True,
+        hide_index=True
     )
 
-# --- 6. RAPPORT ADMINISTRATIF ---
+# --- 6. RAPPORT ---
 st.divider()
-
-# Préparation du texte de l'équipe pour le rapport
 liste_equipe = "\n".join([f"- {m['Nom']} ({m['Grade']})" for m in st.session_state.equipe])
-
 rapport_final = f"""
 ============================================================
         RAPPORT TECHNIQUE OFFICIEL - EHS BATNA
 ============================================================
-Édité le : {pd.Timestamp.now().strftime('%d/%m/%Y')}
+Date : {pd.Timestamp.now().strftime('%d/%m/%Y')}
 
-ÉQUIPE DE GESTION :
+ÉQUIPE :
 {liste_equipe}
 
 ------------------------------------------------------------
-RÉSUMÉ DES TRAVAUX & MONITORING :
+DÉTAILS TECHNIQUES :
 ------------------------------------------------------------
 {st.session_state.df_inventaire.to_string(index=False)}
-
-------------------------------------------------------------
-Signature de l'équipe technique.
 ============================================================
 """
 
 st.download_button(
-    label="📥 Télécharger le Rapport de Projet Complet",
+    label="📥 Télécharger le Rapport Complet",
     data=rapport_final,
-    file_name=f"Rapport_EHS_Batna_{pd.Timestamp.now().strftime('%d_%m_%Y')}.txt",
+    file_name=f"Rapport_EHS_{pd.Timestamp.now().strftime('%d_%m_%Y')}.txt",
     mime="text/plain"
 )
