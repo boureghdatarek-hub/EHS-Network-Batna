@@ -2,24 +2,24 @@ import streamlit as st
 import pandas as pd
 import streamlit.components.v1 as components
 
+# --- 1. CONFIGURATION (TOUJOURS EN PREMIER) ---
+st.set_page_config(page_title="Hosp-Net Pro | Batna", layout="wide")
+
 # --- 0. SECURITY GATE ---
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 
 if not st.session_state["authenticated"]:
-    st.title("🔒 EHS Project Access")
-    password = st.text_input("Enter Project Password:", type="password")
-    if password == "Batna2026": # You can change this to any password you want
+    st.title("🔒 Accès Projet EHS")
+    password = st.text_input("Entrez le mot de passe du projet :", type="password")
+    if password == "Batna2026":
         st.session_state["authenticated"] = True
         st.rerun()
     else:
-        st.info("Please enter the password to access the EHS Batna Dashboard.")
+        st.info("Veuillez entrer le mot de passe pour accéder au tableau de bord.")
         st.stop()
 
-
-# --- 1. CONFIGURATION & THEME ---
-st.set_page_config(page_title="Hosp-Net Pro | Batna", layout="wide")
-
+# --- 2. THEME & CSS ---
 st.markdown("""
     <style>
     .stApp { background-color: #0e1117; color: white; }
@@ -28,94 +28,88 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. HELPER FUNCTIONS ---
+# --- 3. HELPER FUNCTIONS ---
 def speak_update(text):
     components.html(f"""
         <script>
         var msg = new SpeechSynthesisUtterance('{text}');
+        msg.lang = 'fr-FR';
         window.speechSynthesis.speak(msg);
         </script>
     """, height=0)
 
-# --- 3. DASHBOARD HEADER ---
-st.title("🏥 Hospital Network Infrastructure")
-st.write(f"**Lead Engineers:** Tarek & Djamel")
+# --- 4. DASHBOARD HEADER ---
+st.title("🏥 Infrastructure Réseau Hospitalière")
+st.write(f"**Ingénieurs Responsables :** Tarek & Djamel")
 
-# --- 4. TOP METRICS ---
+# --- 5. TOP METRICS ---
 col1, col2, col3, col4 = st.columns(4)
-col1.metric("Ground Floor", "17/17", "100% DONE")
-col2.metric("1st Floor", "3/19", "Cabling Next")
-col3.metric("I-POOK Tests", "17/36", "47%")
-col4.metric("Active Team", "2", "Online")
+col1.metric("RDC", "17/17", "100% OK")
+col2.metric("1er Étage", "3/19", "Câblage en cours")
+col3.metric("Tests I-POOK", "17/36", "47%")
+col4.metric("Équipe Active", "2", "En ligne")
 
 st.divider()
 
-# --- 5. MAIN WORKSPACE ---
-# We define the columns here so the "Deployment Roadmap" works!
+# --- 6. MAIN WORKSPACE ---
 left_col, right_col = st.columns([1, 1.5])
 
 with left_col:
-    # Voice Command Section
-    st.subheader("📢 Digital Command (Talkie-Text)")
-    msg = st.text_input("Send voice message to Djamel:")
-    if st.button("Send & Shout"):
-        st.success(f"Sent: {msg}")
+    st.subheader("📢 Commande Vocale (Talkie-Text)")
+    msg = st.text_input("Message pour Djamel :")
+    if st.button("Envoyer & Parler"):
+        st.success(f"Envoyé : {msg}")
         speak_update(msg)
     
     st.divider()
 
-    # Progress Form Section (Now outside the button!)
-    st.subheader("📝 Log New Progress")
+    st.subheader("📝 Suivi des Travaux")
     with st.form("progress_form", clear_on_submit=True):
-        floor = st.radio("Floor", ["Ground Floor", "1st Floor"], index=1)
-        office = st.text_input("Office / Point ID")
-        task = st.selectbox("Task Completed", ["Raceway Fixed", "Cable Pulled", "Jack Terminated", "I-POOK Verified"])
-        cisco_port = st.number_input("Cisco Switch Port", 1, 48)
+        floor = st.radio("Étage", ["RDC", "1er Étage"], index=1)
+        office = st.text_input("Bureau / ID Prise")
+        task = st.selectbox("Tâche terminée", ["Goulotte posée", "Câble tiré", "Prise raccordée", "Vérifié I-POOK"])
+        cisco_port = st.number_input("Port Switch Cisco", 1, 48)
         
-        if st.form_submit_button("Sync & Shout"):
-            update_text = f"Update from Tarek: {office} {task} on port {cisco_port}"
-            st.success("Cloud Synchronized!")
+        if st.form_submit_button("Synchroniser & Alerter"):
+            update_text = f"Mise à jour de Tarek : {office} {task} sur le port {cisco_port}"
+            st.success("Cloud Synchronisé !")
             speak_update(update_text)
 
 with right_col:
-    st.subheader("📊 Deployment Roadmap")
+    st.subheader("📊 Roadmap de Déploiement")
     data = {
         "ID": ["G-16", "G-17", "F1-01", "F1-02", "F1-03"],
-        "Office": ["Archive", "New Office", "Accounting", "HR", "Pharmacy"],
-        "Status": ["Verified ✅", "Verified ✅", "Raceway 🏗️", "Raceway 🏗️", "Raceway 🏗️"],
-        "Cisco Port": [47, 48, 1, 2, 3],
+        "Bureau": ["Archive", "Nouveau Bureau", "Comptabilité", "RH", "Pharmacie"],
+        "État": ["Vérifié ✅", "Vérifié ✅", "Travaux 🏗️", "Travaux 🏗️", "Travaux 🏗️"],
+        "Port Cisco": [47, 48, 1, 2, 3],
         "VLAN": [10, 10, 20, 20, 20]
     }
     df = pd.DataFrame(data)
     st.dataframe(df, use_container_width=True, hide_index=True)
 
-# --- 6. GÉNÉRATION DU RAPPORT (FOOTER) ---
+# --- 7. GÉNÉRATION DU RAPPORT ---
 st.divider()
 
-# Préparation du contenu du rapport en français
 contenu_rapport = f"""
 RAPPORT D'INFRASTRUCTURE RÉSEAU - EHS BATNA
-Ingénieur responsable : Boureghda Tarek
+Ingénieur : Boureghda Tarek
 Date : {pd.Timestamp.now().strftime('%d/%m/%Y')}
 -----------------------------------------
-ÉTAT D'AVANCEMENT GLOBAL :
-- Rez-de-chaussée : 100% (17/17 terminés)
-- 1er Étage : 15% (3/19) - Prochaine étape : Cablage
-- Testeur I-POOK : 47% (17/36 prises vérifiées)
+ÉTAT GLOBAL :
+- RDC : 100% (17/17)
+- 1er Étage : 15% (3/19)
+- Tests I-POOK : 47% (17/36)
 -----------------------------------------
-DÉTAILS DES TÂCHES (ROADMAP) :
+DÉTAILS DES POINTS :
 {df.to_string(index=False)}
------------------------------------------
-Généré via l'application Smgestion.
 """
 
-# Création du bouton de téléchargement
 st.download_button(
-    label="📑 Télécharger le Rapport Professionnel (PDF/TXT)",
+    label="📑 Télécharger le Rapport en Français",
     data=contenu_rapport,
-    file_name="Rapport_Reseau_EHS_Batna.txt",
+    file_name=f"Rapport_EHS_Batna_{pd.Timestamp.now().strftime('%d_%m_%Y')}.txt",
     mime="text/plain"
 )
 
-if st.button("✨ Afficher la Célébration"):
+if st.button("✨ Célébrer l'avancement"):
     st.balloons()
