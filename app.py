@@ -2,6 +2,21 @@ import streamlit as st
 import pandas as pd
 import streamlit.components.v1 as components
 
+# --- 0. SECURITY GATE ---
+if "authenticated" not in st.session_state:
+    st.session_state["authenticated"] = False
+
+if not st.session_state["authenticated"]:
+    st.title("🔒 EHS Project Access")
+    password = st.text_input("Enter Project Password:", type="password")
+    if password == "Batna2026": # You can change this to any password you want
+        st.session_state["authenticated"] = True
+        st.rerun()
+    else:
+        st.info("Please enter the password to access the EHS Batna Dashboard.")
+        st.stop()
+
+
 # --- 1. CONFIGURATION & THEME ---
 st.set_page_config(page_title="Hosp-Net Pro | Batna", layout="wide")
 
