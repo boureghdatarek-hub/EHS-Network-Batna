@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import os
+import hashlib
 
 # ==================== CONFIGURATION ====================
 st.set_page_config(
@@ -11,7 +12,16 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ==================== FONCTIONS ====================
+# ==================== FONCTIONS DE HACHAGE ====================
+def hash_password(password):
+    """Hache un mot de passe pour la sécurité"""
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def verify_password(password, hashed):
+    """Vérifie un mot de passe"""
+    return hash_password(password) == hashed
+
+# ==================== CHARGEMENT DES DONNÉES ====================
 def load_data():
     """Charge les données réseau"""
     if os.path.exists("reseau_data.csv"):
@@ -41,33 +51,82 @@ def save_data(df):
 
 def log_modification(df, idx):
     """Enregistre qui a modifié et quand"""
-    df.at[idx, 'DerniereModification'] = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-    df.at[idx, 'ModifiePar'] = st.session_state.user_active
+    if 'user_logged_in' in st.session_state:
+        df.at[idx, 'DerniereModification'] = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+        df.at[idx, 'ModifiePar'] = st.session_state.user_username
     return df
 
-# ==================== INITIALISATION ÉQUIPE ====================
-if "equipe" not in st.session_state:
-    st.session_state.equipe = [
-        {"Nom": "Mr. MERZOUG Djamel", "Grade": "Ingénieur en Chef en informatique", "Role": "Suivi"},
-        {"Nom": "Mr. BOUREGHDA Tarek", "Grade": "Technicien Supérieur en informatique", "Role": "Réalisation"}
+# ==================== CHARGEMENT DES UTILISATEURS ====================
+def load_users():
+    """Charge la base des utilisateurs"""
+    if os.path.exists("users.csv"):
+        df = pd.read_csv("users.csv")
+        return df.to_dict('records')
+    
+    # Utilisateurs par défaut (seulement Djamel et Tarek peuvent gérer)
+    return [
+        {"username": "djamel", "password": hash_password("merzoug2026"), "nom": "Mr. MERZOUG Djamel", "grade": "Ingénieur en Chef", "role": "admin", "can_manage_members": True},
+        {"username": "tarek", "password": hash_password("boureghda2026"), "nom": "Mr. BOUREGHDA Tarek", "grade": "Technicien Supérieur", "role": "admin", "can_manage_members": True}
     ]
 
-if "user_active" not in st.session_state:
-    st.session_state.user_active = st.session_state.equipe[0]["Nom"]
+def save_users(users):
+    """Sauvegarde la base des utilisateurs"""
+    df = pd.DataFrame(users)
+    df.to_csv("users.csv", index=False)
 
-# ==================== THÈME (DARK/LIGHT MODE) ====================
+def authenticate_user(username, password):
+    """Vérifie les identifiants"""
+    users = load_users()
+    for user in users:
+        if user["username"].lower() == username.lower():
+            if verify_password(password, user["password"]):
+                return user
+    return None
+
+# ==================== INITIALISATION ====================
+if "df_reseau" not in st.session_state:
+    st.session_state.df_reseau = load_data()
+if "edit_mode" not in st.session_state:
+    st.session_state.edit_mode = None
+if "delete_mode" not in st.session_state:
+    st.session_state.delete_mode = None
+if "current_page" not in st.session_state:
+    st.session_state.current_page = "Dashboard"
 if "theme" not in st.session_state:
     st.session_state.theme = "dark"
+if "user_logged_in" not in st.session_state:
+    st.session_state.user_logged_in = False
+if "user_username" not in st.session_state:
+    st.session_state.user_username = None
+if "user_nom" not in st.session_state:
+    st.session_state.user_nom = None
+if "user_grade" not in st.session_state:
+    st.session_state.user_grade = None
+if "user_role" not in st.session_state:
+    st.session_state.user_role = None
+if "user_can_manage_members" not in st.session_state:
+    st.session_state.user_can_manage_members = False
 
+# ==================== FONCTIONS DE PERMISSIONS ====================
+def can_edit():
+    """Vérifie si l'utilisateur peut modifier"""
+    return st.session_state.user_role in ["admin", "technicien", "superviseur"]
+
+def can_manage_members():
+    """Seuls Djamel et Tarek peuvent gérer les membres"""
+    return st.session_state.user_can_manage_members
+
+def get_user_display():
+    """Retourne l'affichage de l'utilisateur connecté"""
+    return f"{st.session_state.user_nom} ({st.session_state.user_grade})"
+
+# ==================== THÈME ====================
 def toggle_theme():
     st.session_state.theme = "light" if st.session_state.theme == "dark" else "dark"
     st.rerun()
 
-# ==================== SÉCURITÉ ====================
-if "authenticated" not in st.session_state:
-    st.session_state["authenticated"] = False
-
-if not st.session_state["authenticated"]:
+# ==================== PAGE DE LOGIN ====================
+if not st.session_state.user_logged_in:
     st.markdown("""
         <style>
         .login-box {
@@ -79,6 +138,7 @@ if not st.session_state["authenticated"]:
             border: 1px solid #333;
             text-align: center;
         }
+        .login-box h1 { color: #667eea; }
         </style>
     """, unsafe_allow_html=True)
     
@@ -86,17 +146,32 @@ if not st.session_state["authenticated"]:
     st.image("https://img.icons8.com/color/96/000000/hospital-3.png", width=80)
     st.title("🔒 EHS Batna")
     st.markdown("### Monitoring Réseau")
-    password = st.text_input("Mot de passe", type="password", placeholder="Entrez le mot de passe")
-    if st.button("🔓 Se connecter", type="primary", use_container_width=True):
-        if password == "Batna2026":
-            st.session_state["authenticated"] = True
-            st.rerun()
-        else:
-            st.error("❌ Mot de passe incorrect")
+    
+    username = st.text_input("Nom d'utilisateur", placeholder="Entrez votre nom d'utilisateur")
+    password = st.text_input("Mot de passe", type="password", placeholder="Entrez votre mot de passe")
+    
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        if st.button("🔓 Se connecter", type="primary", use_container_width=True):
+            user = authenticate_user(username, password)
+            if user:
+                st.session_state.user_logged_in = True
+                st.session_state.user_username = user["username"]
+                st.session_state.user_nom = user["nom"]
+                st.session_state.user_grade = user["grade"]
+                st.session_state.user_role = user["role"]
+                st.session_state.user_can_manage_members = user.get("can_manage_members", False)
+                st.rerun()
+            else:
+                st.error("❌ Nom d'utilisateur ou mot de passe incorrect")
+    
+    with col2:
+        st.caption("💡 Contactez Djamel ou Tarek pour obtenir vos identifiants")
+    
     st.markdown('</div>', unsafe_allow_html=True)
     st.stop()
 
-# ==================== CSS DYNAMIQUE (DARK/LIGHT MODE) ====================
+# ==================== CSS DYNAMIQUE ====================
 if st.session_state.theme == "dark":
     theme_css = """
     <style>
@@ -106,7 +181,6 @@ if st.session_state.theme == "dark":
     .bureau-card { background: linear-gradient(135deg, #1e1e2e 0%, #1a1a2e 100%); border: 1px solid #2a2a2a; color: white; }
     .header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border: 1px solid #2a2a2a; }
     .footer { border-top: 1px solid #2a2a2a; color: #666; }
-    .stMarkdown, .stTextInput, .stSelectbox, .stButton { color: white; }
     </style>
     """
 else:
@@ -114,23 +188,16 @@ else:
     <style>
     .stApp { background-color: #f0f2f6; color: #1a1a2e; }
     [data-testid="stSidebar"] { background: linear-gradient(180deg, #ffffff 0%, #f0f0f0 100%); border-right: 1px solid #ddd; }
-    .stat-card { background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%); border: 1px solid #ddd; color: #1a1a2e; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-    .bureau-card { background: #ffffff; border: 1px solid #ddd; color: #1a1a2e; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .stat-card { background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%); border: 1px solid #ddd; color: #1a1a2e; }
+    .bureau-card { background: #ffffff; border: 1px solid #ddd; color: #1a1a2e; }
     .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; color: white; }
     .header h1, .header h3, .header p { color: white; }
     .footer { border-top: 1px solid #ddd; color: #888; }
-    .stMarkdown, .stTextInput, .stSelectbox { color: #1a1a2e; }
-    .stButton > button { background-color: #667eea; color: white; }
-    .stButton > button:hover { background-color: #5a67d8; }
-    .badge-success { background-color: #10b98120; color: #10b981; border: 1px solid #10b98140; }
-    .badge-warning { background-color: #f59e0b20; color: #f59e0b; border: 1px solid #f59e0b40; }
-    .badge-danger { background-color: #ef444420; color: #ef4444; border: 1px solid #ef444440; }
     </style>
     """
 
 st.markdown(theme_css, unsafe_allow_html=True)
 
-# ==================== CSS COMMUN ====================
 st.markdown("""
     <style>
     .stat-card {
@@ -177,27 +244,22 @@ st.markdown("""
         margin-top: 30px;
         font-size: 0.8rem;
     }
-    .stToast {
-        background-color: #10b981;
-        color: white;
-    }
     </style>
 """, unsafe_allow_html=True)
-
-# ==================== INITIALISATION DONNÉES ====================
-if "df_reseau" not in st.session_state:
-    st.session_state.df_reseau = load_data()
-if "edit_mode" not in st.session_state:
-    st.session_state.edit_mode = None
-if "delete_mode" not in st.session_state:
-    st.session_state.delete_mode = None
-if "current_page" not in st.session_state:
-    st.session_state.current_page = "Dashboard"
 
 # ==================== SIDEBAR ====================
 with st.sidebar:
     st.markdown("### 🔌 EHS Batna")
     st.markdown("#### Monitoring Réseau")
+    st.markdown("---")
+    
+    # Infos utilisateur
+    st.markdown(f"**👤 Connecté :**")
+    st.markdown(f"**{st.session_state.user_nom}**")
+    st.markdown(f"*{st.session_state.user_grade}*")
+    if st.session_state.user_role == "admin":
+        st.markdown("🔑 *Administrateur*")
+    
     st.markdown("---")
     
     # 🌓 Bouton Dark/Light Mode
@@ -211,29 +273,34 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # 👤 Session active
-    st.markdown("### 👤 Session active")
-    user_names = [m["Nom"] for m in st.session_state.equipe]
-    selected_user = st.selectbox("Qui est connecté ?", user_names, index=user_names.index(st.session_state.user_active) if st.session_state.user_active in user_names else 0)
-    if selected_user != st.session_state.user_active:
-        st.session_state.user_active = selected_user
-        st.toast(f"👋 Bonjour {selected_user.split()[1]} !", icon="👤")
+    # 📋 Menu (selon permissions)
+    st.markdown("### 📋 Navigation")
     
-    st.markdown("---")
-    
-    # 📋 Menu
     menu_items = {
         "Dashboard": "📊",
         "Bureaux": "🏢",
         "Réseau": "🌐",
-        "Équipe": "👥",
-        "Rapports": "📄"
     }
+    
+    # Seuls les admins voient la gestion des membres
+    if can_manage_members():
+        menu_items["Équipe"] = "👥"
+    
+    menu_items["Rapports"] = "📄"
     
     for item, icon in menu_items.items():
         if st.button(f"{icon} {item}", key=f"nav_{item}", use_container_width=True):
             st.session_state.current_page = item
             st.rerun()
+    
+    st.markdown("---")
+    
+    # Déconnexion
+    if st.button("🚪 Se déconnecter", use_container_width=True):
+        for key in ["user_logged_in", "user_username", "user_nom", "user_grade", "user_role", "user_can_manage_members"]:
+            if key in st.session_state:
+                del st.session_state[key]
+        st.rerun()
     
     st.markdown("---")
     st.caption(f"📅 {datetime.now().strftime('%d/%m/%Y %H:%M')}")
@@ -251,10 +318,9 @@ if st.session_state.current_page == "Dashboard":
     st.markdown('<div class="header">', unsafe_allow_html=True)
     st.title("🏥 EHS Batna - Monitoring Réseau")
     st.markdown("### Suivi d'installation des infrastructures")
-    st.markdown(f"*Connecté en tant que : {st.session_state.user_active}*")
+    st.markdown(f"*Connecté en tant que : {st.session_state.user_nom}*")
     st.markdown('</div>', unsafe_allow_html=True)
     
-    # Filtre par Side
     side_filter = st.selectbox("🏢 Filtrer par Side", ["Tous", "🏛️ Administration", "🏥 Medical"])
     
     filtered_df = df.copy()
@@ -322,35 +388,36 @@ if st.session_state.current_page == "Dashboard":
     
     for _, row in filtered_df.head(5).iterrows():
         if row['Statut'] == "🟢 Terminé":
-            badge = '<span class="badge-success">✅ Terminé</span>'
+            badge = '✅ Terminé'
         elif row['Statut'] == "🟡 En cours":
-            badge = '<span class="badge-warning">🟡 En cours</span>'
+            badge = '🟡 En cours'
         else:
-            badge = '<span class="badge-danger">🔴 Non commencé</span>'
+            badge = '🔴 Non commencé'
         
         st.markdown(f"""
         <div class="bureau-card">
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <div>
-                    <strong style="font-size: 1.1rem;">{row['Side']} - {row['Bureau_Num']} - {row['Bureau_Nom']}</strong>
+                    <strong>{row['Side']} - {row['Bureau_Num']} - {row['Bureau_Nom']}</strong>
                     <br>
                     <span style="font-size: 0.85rem; opacity: 0.7;">Étage {row['Etage']}</span>
                     <br>
                     <span style="font-size: 0.8rem;">Goulotte {row['Goulotte']} | Câble {row['Cable']} | Prise {row['Prise']}</span>
                 </div>
-                <div>{badge}</div>
+                <div><strong>{badge}</strong></div>
             </div>
         </div>
         """, unsafe_allow_html=True)
 
-# ==================== PAGE BUREAUX (GESTION) ====================
+# ==================== PAGE BUREAUX ====================
 elif st.session_state.current_page == "Bureaux":
     st.markdown('<div class="header">', unsafe_allow_html=True)
     st.title("🏢 Gestion des bureaux")
     st.markdown("### Ajouter, modifier ou supprimer des bureaux")
+    if not can_edit():
+        st.warning("🔒 Vous êtes en mode lecture seule. Seuls les administrateurs et techniciens peuvent modifier.")
     st.markdown('</div>', unsafe_allow_html=True)
     
-    # Filtre par Side
     side_filter = st.selectbox("🏢 Filtrer par Side", ["Tous", "🏛️ Administration", "🏥 Medical"])
     
     filtered_df = df.copy()
@@ -360,7 +427,7 @@ elif st.session_state.current_page == "Bureaux":
     for idx, row in filtered_df.iterrows():
         original_idx = df[df["Bureau_Num"] == row["Bureau_Num"]].index[0]
         
-        if st.session_state.edit_mode == original_idx:
+        if st.session_state.edit_mode == original_idx and can_edit():
             with st.container():
                 st.markdown(f"""
                 <div class="bureau-card" style="border-color: #f59e0b;">
@@ -393,7 +460,7 @@ elif st.session_state.current_page == "Bureaux":
                         save_data(df)
                         st.session_state.df_reseau = df
                         st.session_state.edit_mode = None
-                        st.toast(f"✅ Bureau modifié par {st.session_state.user_active}", icon="✅")
+                        st.toast(f"✅ Bureau modifié par {st.session_state.user_username}", icon="✅")
                         st.rerun()
                 with col_b2:
                     if st.button("❌ Annuler", key=f"cancel_{original_idx}"):
@@ -404,7 +471,7 @@ elif st.session_state.current_page == "Bureaux":
             <div class="bureau-card">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <div>
-                        <strong style="font-size: 1.1rem;">{row['Side']} - {row['Bureau_Num']} - {row['Bureau_Nom']}</strong>
+                        <strong>{row['Side']} - {row['Bureau_Num']} - {row['Bureau_Nom']}</strong>
                         <br>
                         <span style="font-size: 0.85rem; opacity: 0.7;">Étage {row['Etage']}</span>
                         <br>
@@ -414,25 +481,26 @@ elif st.session_state.current_page == "Bureaux":
             </div>
             """, unsafe_allow_html=True)
             
-            col_btn1, col_btn2 = st.columns(2)
-            with col_btn1:
-                if st.button("✏️ Modifier", key=f"edit_{original_idx}"):
-                    st.session_state.edit_mode = original_idx
-                    st.rerun()
-            with col_btn2:
-                if st.button("🗑️ Supprimer", key=f"delete_{original_idx}", type="secondary"):
-                    st.session_state.delete_mode = original_idx
-                    st.rerun()
+            if can_edit():
+                col_btn1, col_btn2 = st.columns(2)
+                with col_btn1:
+                    if st.button("✏️ Modifier", key=f"edit_{original_idx}"):
+                        st.session_state.edit_mode = original_idx
+                        st.rerun()
+                with col_btn2:
+                    if st.button("🗑️ Supprimer", key=f"delete_{original_idx}", type="secondary"):
+                        st.session_state.delete_mode = original_idx
+                        st.rerun()
+            else:
+                st.caption("🔒 Permission requise pour modifier")
         
-        if st.session_state.delete_mode == original_idx:
+        if st.session_state.delete_mode == original_idx and can_edit():
             st.markdown(f"""
             <div class="bureau-card" style="border-color: #ef4444; background-color: #ef444420;">
                 <div>
                     <strong style="color: #ef4444;">⚠️ Confirmation de suppression</strong>
                     <br>
                     Voulez-vous vraiment supprimer le bureau <strong>{row['Bureau_Num']} - {row['Bureau_Nom']}</strong> ?
-                    <br><br>
-                    Cette action est irréversible.
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -444,7 +512,7 @@ elif st.session_state.current_page == "Bureaux":
                     save_data(df)
                     st.session_state.df_reseau = df
                     st.session_state.delete_mode = None
-                    st.toast(f"🗑️ Bureau supprimé par {st.session_state.user_active}", icon="🗑️")
+                    st.toast(f"🗑️ Bureau supprimé par {st.session_state.user_username}", icon="🗑️")
                     st.rerun()
             with col_conf2:
                 if st.button("❌ Non, annuler", key=f"cancel_delete_{original_idx}"):
@@ -453,53 +521,57 @@ elif st.session_state.current_page == "Bureaux":
         
         st.markdown("---")
     
-    # ==================== AJOUTER UN BUREAU ====================
-    st.markdown("### ➕ Ajouter un nouveau bureau")
-    
-    with st.form(key="add_bureau_form", clear_on_submit=True):
-        col_add1, col_add2, col_add3, col_add4 = st.columns(4)
-        with col_add1:
-            new_side = st.selectbox("Side", ["🏛️ Administration", "🏥 Medical"])
-        with col_add2:
-            new_num = st.text_input("Numéro du bureau", placeholder="Ex: 106, 204...")
-        with col_add3:
-            new_nom = st.text_input("Nom du bureau", placeholder="Ex: Consultation 4, Salle de repos...")
-        with col_add4:
-            new_etage = st.selectbox("Étage", ["RDC", "1er", "2ème", "3ème"])
+    # Ajouter un bureau (seulement si permissions)
+    if can_edit():
+        st.markdown("### ➕ Ajouter un nouveau bureau")
         
-        submitted = st.form_submit_button("➕ Ajouter le bureau", type="primary", use_container_width=True)
-        
-        if submitted:
-            if new_num and new_nom:
-                nouvelle_ligne = pd.DataFrame([{
-                    "Side": new_side,
-                    "Bureau_Num": new_num,
-                    "Bureau_Nom": new_nom,
-                    "Etage": new_etage,
-                    "Goulotte": "⏳ Non commencé",
-                    "Cable": "⏳ Non tiré",
-                    "Prise": "⏳ Non posée",
-                    "Statut": "🔴 Non commencé",
-                    "Commentaire": "",
-                    "DerniereModification": datetime.now().strftime('%d/%m/%Y %H:%M:%S'),
-                    "ModifiePar": st.session_state.user_active
-                }])
-                df = pd.concat([df, nouvelle_ligne], ignore_index=True)
-                save_data(df)
-                st.session_state.df_reseau = df
-                st.toast(f"✅ Bureau {new_num} - {new_nom} ajouté par {st.session_state.user_active}", icon="✅")
-                st.rerun()
-            else:
-                st.error("❌ Veuillez remplir le numéro ET le nom du bureau")
+        with st.form(key="add_bureau_form", clear_on_submit=True):
+            col_add1, col_add2, col_add3, col_add4 = st.columns(4)
+            with col_add1:
+                new_side = st.selectbox("Side", ["🏛️ Administration", "🏥 Medical"])
+            with col_add2:
+                new_num = st.text_input("Numéro du bureau", placeholder="Ex: 106, 204...")
+            with col_add3:
+                new_nom = st.text_input("Nom du bureau", placeholder="Ex: Consultation 4...")
+            with col_add4:
+                new_etage = st.selectbox("Étage", ["RDC", "1er", "2ème", "3ème"])
+            
+            submitted = st.form_submit_button("➕ Ajouter le bureau", type="primary", use_container_width=True)
+            
+            if submitted:
+                if new_num and new_nom:
+                    nouvelle_ligne = pd.DataFrame([{
+                        "Side": new_side,
+                        "Bureau_Num": new_num,
+                        "Bureau_Nom": new_nom,
+                        "Etage": new_etage,
+                        "Goulotte": "⏳ Non commencé",
+                        "Cable": "⏳ Non tiré",
+                        "Prise": "⏳ Non posée",
+                        "Statut": "🔴 Non commencé",
+                        "Commentaire": "",
+                        "DerniereModification": datetime.now().strftime('%d/%m/%Y %H:%M:%S'),
+                        "ModifiePar": st.session_state.user_username
+                    }])
+                    df = pd.concat([df, nouvelle_ligne], ignore_index=True)
+                    save_data(df)
+                    st.session_state.df_reseau = df
+                    st.toast(f"✅ Bureau {new_num} - {new_nom} ajouté par {st.session_state.user_username}", icon="✅")
+                    st.rerun()
+                else:
+                    st.error("❌ Veuillez remplir tous les champs")
+    else:
+        st.info("🔒 Seuls les administrateurs et techniciens peuvent ajouter des bureaux.")
 
 # ==================== PAGE RÉSEAU ====================
 elif st.session_state.current_page == "Réseau":
     st.markdown('<div class="header">', unsafe_allow_html=True)
     st.title("🌐 Suivi réseau par bureau")
     st.markdown("### Goulotte, Câble, Prise murale")
+    if not can_edit():
+        st.warning("🔒 Vous êtes en mode lecture seule. Seuls les administrateurs et techniciens peuvent modifier.")
     st.markdown('</div>', unsafe_allow_html=True)
     
-    # Filtres
     col_f0, col_f1, col_f2 = st.columns(3)
     with col_f0:
         side_filter = st.selectbox("🏢 Side", ["Tous", "🏛️ Administration", "🏥 Medical"])
@@ -519,7 +591,7 @@ elif st.session_state.current_page == "Réseau":
     for idx, row in filtered_df.iterrows():
         original_idx = df[df["Bureau_Num"] == row["Bureau_Num"]].index[0]
         
-        if st.session_state.get(f"edit_reseau_{original_idx}") == True:
+        if st.session_state.get(f"edit_reseau_{original_idx}") == True and can_edit():
             with st.container():
                 st.markdown(f"""
                 <div class="bureau-card" style="border-color: #f59e0b;">
@@ -562,7 +634,7 @@ elif st.session_state.current_page == "Réseau":
                         save_data(df)
                         st.session_state.df_reseau = df
                         st.session_state[f"edit_reseau_{original_idx}"] = False
-                        st.toast(f"✅ Réseau modifié par {st.session_state.user_active}", icon="✅")
+                        st.toast(f"✅ Réseau modifié par {st.session_state.user_username}", icon="✅")
                         st.rerun()
                 with col_b2:
                     if st.button("❌ Annuler", key=f"cancel_reseau_{original_idx}"):
@@ -570,17 +642,17 @@ elif st.session_state.current_page == "Réseau":
                         st.rerun()
         else:
             if row['Statut'] == "🟢 Terminé":
-                badge = '<span class="badge-success">✅ Terminé</span>'
+                badge = '✅ Terminé'
             elif row['Statut'] == "🟡 En cours":
-                badge = '<span class="badge-warning">🟡 En cours</span>'
+                badge = '🟡 En cours'
             else:
-                badge = '<span class="badge-danger">🔴 Non commencé</span>'
+                badge = '🔴 Non commencé'
             
             st.markdown(f"""
             <div class="bureau-card">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                     <div style="flex: 3;">
-                        <strong style="font-size: 1.1rem;">{row['Side']} - {row['Bureau_Num']} - {row['Bureau_Nom']}</strong>
+                        <strong>{row['Side']} - {row['Bureau_Num']} - {row['Bureau_Nom']}</strong>
                         <span style="margin-left: 12px; font-size: 0.85rem; opacity: 0.7;">Étage {row['Etage']}</span>
                         <div style="margin-top: 8px;">
                             <span style="display: inline-block; width: 80px;">Goulotte</span> {row['Goulotte']}<br>
@@ -595,54 +667,86 @@ elif st.session_state.current_page == "Réseau":
                         </div>
                     </div>
                     <div style="flex: 1; text-align: right;">
-                        <div style="margin-bottom: 8px;">{badge}</div>
+                        <div style="margin-bottom: 8px;"><strong>{badge}</strong></div>
                     </div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
             
-            if st.button("✏️ Modifier l'avancement", key=f"edit_reseau_btn_{original_idx}"):
-                st.session_state[f"edit_reseau_{original_idx}"] = True
-                st.rerun()
+            if can_edit():
+                if st.button("✏️ Modifier l'avancement", key=f"edit_reseau_btn_{original_idx}"):
+                    st.session_state[f"edit_reseau_{original_idx}"] = True
+                    st.rerun()
         
         st.markdown("---")
 
-# ==================== PAGE ÉQUIPE ====================
-elif st.session_state.current_page == "Équipe":
+# ==================== PAGE ÉQUIPE (Seulement pour Djamel et Tarek) ====================
+elif st.session_state.current_page == "Équipe" and can_manage_members():
     st.markdown('<div class="header">', unsafe_allow_html=True)
     st.title("👥 Gestion de l'équipe")
-    st.markdown("### Ajouter des membres à l'équipe technique")
+    st.markdown("### Ajouter, modifier ou supprimer des membres")
+    st.markdown("🔐 *Seuls les administrateurs principaux (Djamel et Tarek) ont accès à cette page*")
     st.markdown('</div>', unsafe_allow_html=True)
     
-    col_a, col_b = st.columns([2, 1])
+    users = load_users()
     
-    with col_a:
-        st.markdown("#### 👤 Membres actuels")
-        for m in st.session_state.equipe:
-            role_icon = "📡" if m.get("Role") == "Suivi" else "🛠️"
-            st.info(f"{role_icon} **{m['Nom']}** | {m['Grade']} | *{m.get('Role', 'Membre')}*")
+    # Afficher les membres existants
+    st.markdown("#### 👤 Membres actuels")
     
-    with col_b:
-        st.markdown("#### ➕ Ajouter un membre")
-        with st.form("add_member_form", clear_on_submit=True):
-            new_name = st.text_input("Nom complet", placeholder="Ex: Mr. BENALI Ahmed")
-            new_grade = st.text_input("Grade", placeholder="Ex: Technicien Réseau")
-            new_role = st.selectbox("Rôle", ["Membre", "Suivi", "Réalisation"])
-            
-            if st.form_submit_button("👥 Ajouter à l'équipe", type="primary", use_container_width=True):
-                if new_name and new_grade:
-                    st.session_state.equipe.append({
-                        "Nom": new_name, 
-                        "Grade": new_grade, 
-                        "Role": new_role
-                    })
-                    st.toast(f"✅ {new_name} a rejoint l'équipe !", icon="👥")
+    for user in users:
+        col1, col2, col3, col4 = st.columns([2, 2, 1, 1])
+        with col1:
+            st.markdown(f"**{user['nom']}**")
+        with col2:
+            st.markdown(f"*{user['grade']}*")
+        with col3:
+            st.markdown(f"`{user['username']}`")
+        with col4:
+            if user['username'] not in ["djamel", "tarek"]:
+                if st.button("🗑️ Supprimer", key=f"del_user_{user['username']}"):
+                    users = [u for u in users if u['username'] != user['username']]
+                    save_users(users)
+                    st.toast(f"✅ {user['nom']} a été supprimé", icon="🗑️")
                     st.rerun()
+        st.divider()
+    
+    # Ajouter un nouveau membre
+    st.markdown("#### ➕ Ajouter un membre")
+    
+    with st.form("add_user_form", clear_on_submit=True):
+        col_a1, col_a2 = st.columns(2)
+        with col_a1:
+            new_username = st.text_input("Nom d'utilisateur", placeholder="Ex: ahmed")
+            new_nom = st.text_input("Nom complet", placeholder="Ex: Mr. BENALI Ahmed")
+        with col_a2:
+            new_password = st.text_input("Mot de passe", type="password", placeholder="Mot de passe")
+            new_grade = st.text_input("Grade", placeholder="Ex: Technicien Réseau")
+        
+        new_role = st.selectbox("Rôle", ["technicien", "superviseur", "observateur"])
+        st.caption("Rôles : technicien (peut modifier), superviseur (peut modifier), observateur (lecture seule)")
+        
+        if st.form_submit_button("➕ Ajouter le membre", type="primary"):
+            if new_username and new_nom and new_password:
+                # Vérifier si l'utilisateur existe déjà
+                if any(u['username'] == new_username.lower() for u in users):
+                    st.error("❌ Ce nom d'utilisateur existe déjà")
                 else:
-                    st.error("❌ Veuillez remplir tous les champs")
+                    users.append({
+                        "username": new_username.lower(),
+                        "password": hash_password(new_password),
+                        "nom": new_nom,
+                        "grade": new_grade,
+                        "role": new_role,
+                        "can_manage_members": False
+                    })
+                    save_users(users)
+                    st.toast(f"✅ {new_nom} a rejoint l'équipe !", icon="👥")
+                    st.rerun()
+            else:
+                st.error("❌ Veuillez remplir tous les champs")
     
     st.markdown("---")
-    st.info("💡 Les membres ajoutés pourront être sélectionnés dans la sidebar comme 'Session active'")
+    st.info("💡 Les nouveaux membres pourront se connecter avec leur nom d'utilisateur et mot de passe")
 
 # ==================== PAGE RAPPORTS ====================
 elif st.session_state.current_page == "Rapports":
@@ -651,12 +755,14 @@ elif st.session_state.current_page == "Rapports":
     st.markdown("### Export des données réseau")
     st.markdown('</div>', unsafe_allow_html=True)
     
-    equipe_str = "\n".join([f"- {m['Nom']} ({m['Grade']}) - {m.get('Role', 'Membre')}" for m in st.session_state.equipe])
+    users = load_users()
+    equipe_str = "\n".join([f"- {u['nom']} ({u['grade']}) - {u['role']}" for u in users])
     
     rapport = f"""
 RAPPORT DE MONITORING RÉSEAU - EHS BATNA
 ========================================
 Date : {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
+Généré par : {st.session_state.user_nom}
 
 ÉQUIPE TECHNIQUE
 ----------------
@@ -693,5 +799,7 @@ FIN DU RAPPORT
 st.markdown(f"""
 <div class="footer">
     EHS Batna - Service Informatique | Monitoring Réseau v5.0 | Mode {st.session_state.theme.upper()}
+    <br>
+    Connecté : {st.session_state.user_nom} | {st.session_state.user_role}
 </div>
 """, unsafe_allow_html=True)
