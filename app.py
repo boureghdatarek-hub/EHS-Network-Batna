@@ -13,7 +13,6 @@ st.set_page_config(
 
 # ==================== CHARGEMENT DES DONNÉES RÉSEAU ====================
 def load_data():
-    """Charge les données réseau"""
     if os.path.exists("reseau_data.csv"):
         df = pd.read_csv("reseau_data.csv")
         colonnes_requises = ["Side", "Bureau_Num", "Bureau_Nom", "Etage", "Goulotte", "Cable", "Prise", "Statut", "Commentaire", "DerniereModification", "ModifiePar"]
@@ -40,30 +39,15 @@ def save_data(df):
     df.to_csv("reseau_data.csv", index=False)
 
 def log_modification(df, idx):
-    """Enregistre qui a modifié et quand"""
     if 'user_username' in st.session_state:
         df.at[idx, 'DerniereModification'] = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
         df.at[idx, 'ModifiePar'] = st.session_state.user_username.upper()
     return df
 
-# ==================== CHARGEMENT DES UTILISATEURS ====================
-def load_users():
-    """Charge les utilisateurs depuis le fichier CSV"""
-    if os.path.exists("users.csv"):
-        df = pd.read_csv("users.csv")
-        users = {}
-        for _, row in df.iterrows():
-            users[row["username"]] = {
-                "password": row["password"],
-                "nom": row["nom"],
-                "grade": row["grade"],
-                "role": row["role"],
-                "can_manage_members": row["can_manage_members"] == "True"
-            }
-        return users
-    else:
-        # Utilisateurs par défaut
-        return {
+# ==================== UTILISATEURS (STOCKÉS DANS SESSION_STATE) ====================
+def init_users():
+    if "users" not in st.session_state:
+        st.session_state.users = {
             "djamel": {
                 "password": "merzoug2026",
                 "nom": "Mr. MERZOUG Djamel",
@@ -80,31 +64,32 @@ def load_users():
             }
         }
 
-def save_users(users):
-    """Sauvegarde les utilisateurs dans le fichier CSV"""
-    data = []
-    for username, user_data in users.items():
-        data.append({
-            "username": username,
-            "password": user_data["password"],
-            "nom": user_data["nom"],
-            "grade": user_data["grade"],
-            "role": user_data["role"],
-            "can_manage_members": user_data["can_manage_members"]
-        })
-    df = pd.DataFrame(data)
-    df.to_csv("users.csv", index=False)
-
 def authenticate_user(username, password):
-    """Vérifie les identifiants"""
     username = username.lower().strip()
-    users = load_users()
-    if username in users:
-        if users[username]["password"] == password:
-            return users[username]
+    init_users()
+    if username in st.session_state.users:
+        if st.session_state.users[username]["password"] == password:
+            return st.session_state.users[username]
     return None
 
+def add_user(username, password, nom, grade, role):
+    init_users()
+    st.session_state.users[username.lower()] = {
+        "password": password,
+        "nom": nom,
+        "grade": grade,
+        "role": role,
+        "can_manage_members": False
+    }
+
+def delete_user(username):
+    init_users()
+    if username in st.session_state.users and username not in ["djamel", "tarek"]:
+        del st.session_state.users[username]
+
 # ==================== INITIALISATION ====================
+init_users()
+
 if "df_reseau" not in st.session_state:
     st.session_state.df_reseau = load_data()
 if "edit_mode" not in st.session_state:
@@ -194,7 +179,7 @@ if not st.session_state.user_logged_in:
     st.markdown('</div>', unsafe_allow_html=True)
     st.stop()
 
-# ==================== CSS DYNAMIQUE ====================
+# ==================== CSS ====================
 if st.session_state.theme == "dark":
     theme_css = """
     <style>
@@ -275,7 +260,6 @@ with st.sidebar:
     st.markdown("#### Monitoring Réseau")
     st.markdown("---")
     
-    # Infos utilisateur
     st.markdown(f"**👤 Connecté :**")
     st.markdown(f"**{st.session_state.user_nom}**")
     st.markdown(f"*{st.session_state.user_grade}*")
@@ -284,7 +268,6 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # 🌓 Bouton Dark/Light Mode
     col_theme1, col_theme2 = st.columns([1, 3])
     with col_theme1:
         theme_icon = "🌙" if st.session_state.theme == "dark" else "☀️"
@@ -295,7 +278,6 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # 📋 Menu
     st.markdown("### 📋 Navigation")
     
     menu_items = {
@@ -305,7 +287,6 @@ with st.sidebar:
         "Rapports": "📄"
     }
     
-    # Ajouter la gestion d'équipe uniquement pour les admins
     if st.session_state.user_can_manage_members:
         menu_items["Équipe"] = "👥"
     
@@ -316,7 +297,6 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # Déconnexion
     if st.button("🚪 Se déconnecter", use_container_width=True):
         for key in ["user_logged_in", "user_username", "user_nom", "user_grade", "user_role", "user_can_manage_members"]:
             if key in st.session_state:
@@ -537,7 +517,6 @@ elif st.session_state.current_page == "Bureaux":
         
         st.markdown("---")
     
-    # Ajouter un bureau
     st.markdown("### ➕ Ajouter un nouveau bureau")
     
     with st.form(key="add_bureau_form", clear_on_submit=True):
@@ -698,13 +677,9 @@ elif st.session_state.current_page == "Équipe" and st.session_state.user_can_ma
     st.markdown("🔐 *Seuls les administrateurs principaux (Djamel et Tarek) ont accès à cette page*")
     st.markdown('</div>', unsafe_allow_html=True)
     
-    # Charger les utilisateurs actuels
-    users = load_users()
-    
-    # Afficher les membres existants
     st.markdown("#### 👤 Membres actuels")
     
-    for username, user_data in users.items():
+    for username, user_data in st.session_state.users.items():
         col1, col2, col3, col4 = st.columns([2, 2, 1, 1])
         with col1:
             st.markdown(f"**{user_data['nom']}**")
@@ -715,15 +690,13 @@ elif st.session_state.current_page == "Équipe" and st.session_state.user_can_ma
         with col4:
             if username not in ["djamel", "tarek"]:
                 if st.button("🗑️ Supprimer", key=f"del_user_{username}"):
-                    del users[username]
-                    save_users(users)
+                    delete_user(username)
                     st.toast(f"✅ {user_data['nom']} a été supprimé", icon="🗑️")
                     st.rerun()
         st.divider()
     
     st.markdown("---")
     
-    # Ajouter un nouveau membre
     st.markdown("#### ➕ Ajouter un membre")
     
     with st.form("add_user_form", clear_on_submit=True):
@@ -740,17 +713,10 @@ elif st.session_state.current_page == "Équipe" and st.session_state.user_can_ma
         
         if st.form_submit_button("➕ Ajouter le membre", type="primary", use_container_width=True):
             if new_username and new_nom and new_password:
-                if new_username.lower() in users:
+                if new_username.lower() in st.session_state.users:
                     st.error("❌ Ce nom d'utilisateur existe déjà")
                 else:
-                    users[new_username.lower()] = {
-                        "password": new_password,
-                        "nom": new_nom,
-                        "grade": new_grade,
-                        "role": new_role,
-                        "can_manage_members": False
-                    }
-                    save_users(users)
+                    add_user(new_username, new_password, new_nom, new_grade, new_role)
                     st.toast(f"✅ {new_nom} a rejoint l'équipe !", icon="👥")
                     st.rerun()
             else:
