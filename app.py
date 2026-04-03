@@ -11,7 +11,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ==================== CHARGEMENT DES DONNÉES ====================
+# ==================== CHARGEMENT DES DONNÉES RÉSEAU ====================
 def load_data():
     """Charge les données réseau"""
     if os.path.exists("reseau_data.csv"):
@@ -46,30 +46,62 @@ def log_modification(df, idx):
         df.at[idx, 'ModifiePar'] = st.session_state.user_username.upper()
     return df
 
-# ==================== UTILISATEURS ====================
-USERS = {
-    "djamel": {
-        "password": "merzoug2026",
-        "nom": "Mr. MERZOUG Djamel",
-        "grade": "Ingénieur en Chef",
-        "role": "admin",
-        "can_manage_members": True
-    },
-    "tarek": {
-        "password": "boureghda2026",
-        "nom": "Mr. BOUREGHDA Tarek",
-        "grade": "Technicien Supérieur",
-        "role": "admin",
-        "can_manage_members": True
-    }
-}
+# ==================== CHARGEMENT DES UTILISATEURS ====================
+def load_users():
+    """Charge les utilisateurs depuis le fichier CSV"""
+    if os.path.exists("users.csv"):
+        df = pd.read_csv("users.csv")
+        users = {}
+        for _, row in df.iterrows():
+            users[row["username"]] = {
+                "password": row["password"],
+                "nom": row["nom"],
+                "grade": row["grade"],
+                "role": row["role"],
+                "can_manage_members": row["can_manage_members"] == "True"
+            }
+        return users
+    else:
+        # Utilisateurs par défaut
+        return {
+            "djamel": {
+                "password": "merzoug2026",
+                "nom": "Mr. MERZOUG Djamel",
+                "grade": "Ingénieur en Chef",
+                "role": "admin",
+                "can_manage_members": True
+            },
+            "tarek": {
+                "password": "boureghda2026",
+                "nom": "Mr. BOUREGHDA Tarek",
+                "grade": "Technicien Supérieur",
+                "role": "admin",
+                "can_manage_members": True
+            }
+        }
+
+def save_users(users):
+    """Sauvegarde les utilisateurs dans le fichier CSV"""
+    data = []
+    for username, user_data in users.items():
+        data.append({
+            "username": username,
+            "password": user_data["password"],
+            "nom": user_data["nom"],
+            "grade": user_data["grade"],
+            "role": user_data["role"],
+            "can_manage_members": user_data["can_manage_members"]
+        })
+    df = pd.DataFrame(data)
+    df.to_csv("users.csv", index=False)
 
 def authenticate_user(username, password):
     """Vérifie les identifiants"""
     username = username.lower().strip()
-    if username in USERS:
-        if USERS[username]["password"] == password:
-            return USERS[username]
+    users = load_users()
+    if username in users:
+        if users[username]["password"] == password:
+            return users[username]
     return None
 
 # ==================== INITIALISATION ====================
@@ -666,10 +698,13 @@ elif st.session_state.current_page == "Équipe" and st.session_state.user_can_ma
     st.markdown("🔐 *Seuls les administrateurs principaux (Djamel et Tarek) ont accès à cette page*")
     st.markdown('</div>', unsafe_allow_html=True)
     
+    # Charger les utilisateurs actuels
+    users = load_users()
+    
     # Afficher les membres existants
     st.markdown("#### 👤 Membres actuels")
     
-    for username, user_data in USERS.items():
+    for username, user_data in users.items():
         col1, col2, col3, col4 = st.columns([2, 2, 1, 1])
         with col1:
             st.markdown(f"**{user_data['nom']}**")
@@ -680,7 +715,8 @@ elif st.session_state.current_page == "Équipe" and st.session_state.user_can_ma
         with col4:
             if username not in ["djamel", "tarek"]:
                 if st.button("🗑️ Supprimer", key=f"del_user_{username}"):
-                    del USERS[username]
+                    del users[username]
+                    save_users(users)
                     st.toast(f"✅ {user_data['nom']} a été supprimé", icon="🗑️")
                     st.rerun()
         st.divider()
@@ -704,16 +740,17 @@ elif st.session_state.current_page == "Équipe" and st.session_state.user_can_ma
         
         if st.form_submit_button("➕ Ajouter le membre", type="primary", use_container_width=True):
             if new_username and new_nom and new_password:
-                if new_username.lower() in USERS:
+                if new_username.lower() in users:
                     st.error("❌ Ce nom d'utilisateur existe déjà")
                 else:
-                    USERS[new_username.lower()] = {
+                    users[new_username.lower()] = {
                         "password": new_password,
                         "nom": new_nom,
                         "grade": new_grade,
                         "role": new_role,
                         "can_manage_members": False
                     }
+                    save_users(users)
                     st.toast(f"✅ {new_nom} a rejoint l'équipe !", icon="👥")
                     st.rerun()
             else:
