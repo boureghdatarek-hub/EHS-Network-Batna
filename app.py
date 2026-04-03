@@ -663,6 +663,72 @@ elif st.session_state.current_page == "Réseau":
         
         st.markdown("---")
 
+# ==================== PAGE ÉQUIPE (Seulement pour Djamel et Tarek) ====================
+elif st.session_state.current_page == "Équipe" and st.session_state.user_can_manage_members:
+    st.markdown('<div class="header">', unsafe_allow_html=True)
+    st.title("👥 Gestion de l'équipe")
+    st.markdown("### Ajouter ou supprimer des membres")
+    st.markdown("🔐 *Seuls les administrateurs principaux (Djamel et Tarek) ont accès à cette page*")
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Afficher les membres existants
+    st.markdown("#### 👤 Membres actuels")
+    
+    for username, user_data in USERS.items():
+        col1, col2, col3, col4 = st.columns([2, 2, 1, 1])
+        with col1:
+            st.markdown(f"**{user_data['nom']}**")
+        with col2:
+            st.markdown(f"*{user_data['grade']}*")
+        with col3:
+            st.markdown(f"`{username}`")
+        with col4:
+            # Ne pas permettre la suppression de Djamel et Tarek
+            if username not in ["djamel", "tarek"]:
+                if st.button("🗑️ Supprimer", key=f"del_user_{username}"):
+                    del USERS[username]
+                    st.toast(f"✅ {user_data['nom']} a été supprimé", icon="🗑️")
+                    st.rerun()
+        st.divider()
+    
+    st.markdown("---")
+    
+    # Ajouter un nouveau membre
+    st.markdown("#### ➕ Ajouter un membre")
+    
+    with st.form("add_user_form", clear_on_submit=True):
+        col_a1, col_a2 = st.columns(2)
+        with col_a1:
+            new_username = st.text_input("Nom d'utilisateur", placeholder="Ex: ahmed", key="new_username")
+            new_nom = st.text_input("Nom complet", placeholder="Ex: Mr. BENALI Ahmed", key="new_nom")
+        with col_a2:
+            new_password = st.text_input("Mot de passe", type="password", placeholder="Mot de passe", key="new_password")
+            new_grade = st.text_input("Grade", placeholder="Ex: Technicien Réseau", key="new_grade")
+        
+        new_role = st.selectbox("Rôle", ["technicien", "superviseur", "observateur"], key="new_role")
+        st.caption("📌 Rôles : technicien (peut modifier), superviseur (peut modifier), observateur (lecture seule)")
+        
+        if st.form_submit_button("➕ Ajouter le membre", type="primary", use_container_width=True):
+            if new_username and new_nom and new_password:
+                # Vérifier si l'utilisateur existe déjà
+                if new_username.lower() in USERS:
+                    st.error("❌ Ce nom d'utilisateur existe déjà")
+                else:
+                    USERS[new_username.lower()] = {
+                        "password": new_password,
+                        "nom": new_nom,
+                        "grade": new_grade,
+                        "role": new_role,
+                        "can_manage_members": False
+                    }
+                    st.toast(f"✅ {new_nom} a rejoint l'équipe !", icon="👥")
+                    st.rerun()
+            else:
+                st.error("❌ Veuillez remplir tous les champs")
+    
+    st.markdown("---")
+    st.info("💡 Les nouveaux membres pourront se connecter avec leur nom d'utilisateur et mot de passe")
+
 # ==================== PAGE RAPPORTS ====================
 elif st.session_state.current_page == "Rapports":
     st.markdown('<div class="header">', unsafe_allow_html=True)
