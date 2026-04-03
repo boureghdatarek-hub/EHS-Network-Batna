@@ -268,7 +268,7 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # 📋 Menu
+        # 📋 Menu
     st.markdown("### 📋 Navigation")
     
     menu_items = {
@@ -277,6 +277,10 @@ with st.sidebar:
         "Réseau": "🌐",
         "Rapports": "📄"
     }
+    
+    # Ajouter la gestion d'équipe uniquement pour les admins
+    if st.session_state.user_can_manage_members:
+        menu_items["Équipe"] = "👥"
     
     for item, icon in menu_items.items():
         if st.button(f"{icon} {item}", key=f"nav_{item}", use_container_width=True):
