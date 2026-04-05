@@ -3,6 +3,8 @@ import pandas as pd
 from datetime import datetime
 import os
 import base64
+from io import BytesIO
+import tempfile
 
 # ==================== CONFIGURATION ====================
 st.set_page_config(
@@ -22,6 +24,7 @@ def load_data():
                 df[col] = ""
         return df
     
+    # Données par défaut (fichier n'existe pas)
     return pd.DataFrame({
         "ID": [1, 2, 3, 4, 5],
         "Side": ["🏛️ Administration", "🏛️ Administration", "🏛️ Administration", "🏥 Medical", "🏥 Medical"],
@@ -33,17 +36,12 @@ def load_data():
         "Prise": ["✅ Posée", "⏳ Non posée", "⏳ Non posée", "✅ Posée", "⏳ Non posée"],
         "Statut": ["🟢 Terminé", "🟢 Terminé", "🟡 En cours", "🟢 Terminé", "🔴 Non commencé"],
         "Commentaire": ["", "", "Tirage câble cette semaine", "", ""],
-        "DerniereModification": [datetime.now().strftime('%d/%m/%Y %H:%M'), "", "", "", ""],
-        "ModifiePar": ["BOUREGHDA T.", "", "", "", ""]
+        "DerniereModification": ["", "", "", "", ""],
+        "ModifiePar": ["", "", "", "", ""]
     })
+
 def save_data(df):
     df.to_csv("reseau_data.csv", index=False)
-
-def log_modification(df, idx):
-    if 'user_username' in st.session_state:
-        df.at[idx, 'DerniereModification'] = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-        df.at[idx, 'ModifiePar'] = st.session_state.user_username.upper()
-    return df
 
 # ==================== FONCTIONS POUR LE LOGO ====================
 def get_logo_base64():
@@ -441,7 +439,7 @@ elif st.session_state.current_page == "Bureaux":
     filtered_df = filtered_df.reset_index(drop=True)
     
     for idx, row in filtered_df.iterrows():
-        bureau_id = row['ID']  # L'ID ne change jamais !
+        bureau_id = row['ID']
         
         if st.session_state.get(f"edit_mode_{bureau_id}") == True:
             with st.container():
@@ -468,7 +466,6 @@ elif st.session_state.current_page == "Bureaux":
                 col_btn1, col_btn2 = st.columns(2)
                 with col_btn1:
                     if st.button("💾 Sauvegarder", key=f"save_{bureau_id}", type="primary"):
-                        # Trouver l'index par ID (plus fiable)
                         idx_in_df = df[df["ID"] == bureau_id].index
                         if len(idx_in_df) > 0:
                             original_idx = idx_in_df[0]
@@ -521,7 +518,7 @@ elif st.session_state.current_page == "Bureaux":
         
         st.markdown("---")
     
-    # Ajouter un bureau (avec un nouvel ID)
+    # Ajouter un bureau
     st.markdown("### ➕ Ajouter un nouveau bureau")
     
     with st.form(key="add_bureau_form", clear_on_submit=True):
@@ -537,7 +534,6 @@ elif st.session_state.current_page == "Bureaux":
         
         if st.form_submit_button("➕ Ajouter", type="primary", use_container_width=True):
             if new_num and new_nom:
-                # Calculer le prochain ID
                 next_id = df["ID"].max() + 1 if len(df) > 0 else 1
                 new_row = pd.DataFrame([{
                     "ID": next_id,
@@ -743,10 +739,8 @@ elif st.session_state.current_page == "Rapports":
     from reportlab.lib import colors
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import inch
-    from io import BytesIO
     from docx import Document
     from docx.shared import Inches
-    import tempfile
     
     st.markdown('<div class="header">', unsafe_allow_html=True)
     st.title("📄 Rapports")
@@ -769,10 +763,9 @@ elif st.session_state.current_page == "Rapports":
         if logo_base64:
             try:
                 img_data = base64.b64decode(logo_base64)
-                tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
-                tmp_file.write(img_data)
-                tmp_file.close()
-                tmp_path = tmp_file.name
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
+                    tmp.write(img_data)
+                    tmp_path = tmp.name
                 img = Image(tmp_path, width=50, height=50)
                 elements.append(img)
             except Exception:
