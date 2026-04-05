@@ -764,9 +764,16 @@ elif st.session_state.current_page == "Équipe" and st.session_state.user_can_ma
     
     st.markdown("---")
     st.info("💡 Les nouveaux membres pourront se connecter avec leur nom d'utilisateur et mot de passe")
-
 # ==================== PAGE RAPPORTS ====================
 elif st.session_state.current_page == "Rapports":
+    from reportlab.lib.pagesizes import letter
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib import colors
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from io import BytesIO
+    from docx import Document
+    
     st.markdown('<div class="header">', unsafe_allow_html=True)
     st.title("📄 Rapports")
     st.markdown("### Export des données réseau")
@@ -778,7 +785,100 @@ elif st.session_state.current_page == "Rapports":
     if logo_base64:
         logo_html = f'<img src="data:image/png;base64,{logo_base64}" width="80" style="margin-bottom: 10px;">'
     
-    rapport = f"""
+    # ==================== CRÉER UN VRAI PDF ====================
+    def create_pdf():
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter)
+        styles = getSampleStyleSheet()
+        elements = []
+        
+        title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=16, textColor=colors.HexColor('#667eea'))
+        elements.append(Paragraph("RAPPORT DE MONITORING RÉSEAU - EHS BATNA", title_style))
+        elements.append(Spacer(1, 0.2*inch))
+        elements.append(Paragraph(f"Date : {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", styles['Normal']))
+        elements.append(Spacer(1, 0.2*inch))
+        
+        elements.append(Paragraph("ÉQUIPE TECHNIQUE :", styles['Heading4']))
+        elements.append(Paragraph("- Suivi : Mr. MERZOUG Djamel (Ingénieur en Chef)", styles['Normal']))
+        elements.append(Paragraph("- Réalisation : Mr. BOUREGHDA Tarek (Technicien Supérieur)", styles['Normal']))
+        elements.append(Spacer(1, 0.2*inch))
+        
+        elements.append(Paragraph("STATISTIQUES :", styles['Heading4']))
+        elements.append(Paragraph(f"- Total bureaux : {total_bureaux}", styles['Normal']))
+        elements.append(Paragraph(f"- Terminés : {termines}", styles['Normal']))
+        elements.append(Paragraph(f"- En cours : {en_cours}", styles['Normal']))
+        elements.append(Paragraph(f"- Non commencés : {non_commences}", styles['Normal']))
+        elements.append(Paragraph(f"- Progression : {progression:.0f}%", styles['Normal']))
+        elements.append(Spacer(1, 0.2*inch))
+        
+        table_data = [["Side", "Bureau", "Nom", "Étage", "Goulotte", "Câble", "Prise", "Statut"]]
+        for _, row in df.iterrows():
+            table_data.append([
+                str(row['Side']), str(row['Bureau_Num']), str(row['Bureau_Nom']), str(row['Etage']),
+                str(row['Goulotte']), str(row['Cable']), str(row['Prise']), str(row['Statut'])
+            ])
+        
+        table = Table(table_data)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#667eea')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        elements.append(table)
+        
+        doc.build(elements)
+        buffer.seek(0)
+        return buffer
+    
+    # ==================== CRÉER UN VRAI WORD ====================
+    def create_word():
+        doc = Document()
+        doc.add_heading('RAPPORT DE MONITORING RÉSEAU - EHS BATNA', 0)
+        doc.add_paragraph(f"Date : {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
+        doc.add_paragraph("")
+        
+        doc.add_heading('ÉQUIPE TECHNIQUE :', level=1)
+        doc.add_paragraph('Suivi : Mr. MERZOUG Djamel (Ingénieur en Chef)')
+        doc.add_paragraph('Réalisation : Mr. BOUREGHDA Tarek (Technicien Supérieur)')
+        doc.add_paragraph("")
+        
+        doc.add_heading('STATISTIQUES :', level=1)
+        doc.add_paragraph(f'Total bureaux : {total_bureaux}')
+        doc.add_paragraph(f'Terminés : {termines}')
+        doc.add_paragraph(f'En cours : {en_cours}')
+        doc.add_paragraph(f'Non commencés : {non_commences}')
+        doc.add_paragraph(f'Progression : {progression:.0f}%')
+        doc.add_paragraph("")
+        
+        doc.add_heading('DÉTAIL PAR BUREAU :', level=1)
+        table = doc.add_table(rows=1, cols=8)
+        table.style = 'Table Grid'
+        hdr_cells = table.rows[0].cells
+        headers = ['Side', 'Bureau', 'Nom', 'Étage', 'Goulotte', 'Câble', 'Prise', 'Statut']
+        for i, h in enumerate(headers):
+            hdr_cells[i].text = h
+        
+        for _, row in df.iterrows():
+            row_cells = table.add_row().cells
+            row_cells[0].text = str(row['Side'])
+            row_cells[1].text = str(row['Bureau_Num'])
+            row_cells[2].text = str(row['Bureau_Nom'])
+            row_cells[3].text = str(row['Etage'])
+            row_cells[4].text = str(row['Goulotte'])
+            row_cells[5].text = str(row['Cable'])
+            row_cells[6].text = str(row['Prise'])
+            row_cells[7].text = str(row['Statut'])
+        
+        buffer = BytesIO()
+        doc.save(buffer)
+        buffer.seek(0)
+        return buffer
+    
+    # ==================== RAPPORT TEXTE ====================
+    rapport_txt = f"""
 {logo_html}
 ============================================================
            RAPPORT DE MONITORING RÉSEAU - EHS BATNA
@@ -809,20 +909,20 @@ FIN DU RAPPORT
     
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.download_button("📥 Télécharger TXT", rapport, f"rapport_reseau_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt", use_container_width=True)
+        st.download_button("📥 Télécharger TXT", rapport_txt, f"rapport_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt", use_container_width=True)
     with col2:
-        st.download_button("📄 Télécharger PDF", rapport, f"rapport_reseau_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf", use_container_width=True)
+        try:
+            pdf_buffer = create_pdf()
+            st.download_button("📥 Télécharger PDF", pdf_buffer, f"rapport_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf", mime="application/pdf", use_container_width=True)
+        except Exception as e:
+            st.error(f"Erreur PDF : {e}")
     with col3:
-        st.download_button("📝 Télécharger Word", rapport, f"rapport_reseau_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx", use_container_width=True)
+        try:
+            word_buffer = create_word()
+            st.download_button("📥 Télécharger Word", word_buffer, f"rapport_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx", use_container_width=True)
+        except Exception as e:
+            st.error(f"Erreur Word : {e}")
     
     st.markdown("---")
-    st.info("💡 Astuce : Vous pouvez modifier les fichiers exportés selon vos besoins")
+    st.info("💡 Les fichiers PDF et Word sont de vrais documents ouvrables normalement.")
 
-# ==================== FOOTER ====================
-st.markdown(f"""
-<div class="footer">
-    EHS Batna - Service Informatique | Monitoring Réseau v6.0 | Mode {st.session_state.theme.upper()}
-    <br>
-    Connecté : {st.session_state.user_nom}
-</div>
-""", unsafe_allow_html=True)
