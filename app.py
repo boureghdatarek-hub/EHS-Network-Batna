@@ -774,6 +774,7 @@ elif st.session_state.current_page == "Rapports":
     from reportlab.lib.units import inch
     from io import BytesIO
     from docx import Document
+    from docx.shared import Inches
     import tempfile
     
     st.markdown('<div class="header">', unsafe_allow_html=True)
@@ -796,15 +797,17 @@ elif st.session_state.current_page == "Rapports":
         
         # Ajouter le logo dans le PDF
         logo_base64 = get_logo_base64()
+        tmp_path = None
         if logo_base64:
             try:
                 img_data = base64.b64decode(logo_base64)
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
-                    tmp.write(img_data)
-                    tmp_path = tmp.name
+                tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
+                tmp_file.write(img_data)
+                tmp_file.close()
+                tmp_path = tmp_file.name
+                
                 img = Image(tmp_path, width=50, height=50)
                 elements.append(img)
-                os.unlink(tmp_path)
             except Exception:
                 pass
         
@@ -853,6 +856,14 @@ elif st.session_state.current_page == "Rapports":
         
         doc.build(elements)
         buffer.seek(0)
+        
+        # Nettoyer le fichier temporaire
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except:
+                pass
+        
         return buffer
     
     # ==================== CRÉER UN VRAI WORD ====================
@@ -863,7 +874,6 @@ elif st.session_state.current_page == "Rapports":
         logo_base64 = get_logo_base64()
         if logo_base64:
             try:
-                from docx.shared import Inches
                 img_data = base64.b64decode(logo_base64)
                 with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
                     tmp.write(img_data)
