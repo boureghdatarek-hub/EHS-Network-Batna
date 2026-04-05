@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import os
+import base64
+
 
 # ==================== CONFIGURATION ====================
 st.set_page_config(
@@ -51,6 +53,29 @@ def get_bureau_index(df, bureau_num, bureau_nom):
     if indices:
         return indices[0]
     return None
+
+# ==================== FONCTIONS POUR LE LOGO ====================
+def get_logo_base64():
+    logo_path = "logo.png"
+    if os.path.exists(logo_path):
+        with open(logo_path, "rb") as f:
+            return base64.b64encode(f.read()).decode()
+    return None
+
+def display_logo(size=80):
+    logo_base64 = get_logo_base64()
+    if logo_base64:
+        st.markdown(f"""
+        <div style="text-align: center; margin-bottom: 20px;">
+            <img src="data:image/png;base64,{logo_base64}" width="{size}">
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div style="text-align: center; margin-bottom: 20px;">
+            <div style="font-size: 3rem;">🏥</div>
+        </div>
+        """, unsafe_allow_html=True)
 
 # ==================== UTILISATEURS ====================
 if "users" not in st.session_state:
@@ -253,11 +278,15 @@ st.markdown("""
         margin-top: 30px;
         font-size: 0.8rem;
     }
+    
     </style>
 """, unsafe_allow_html=True)
 
 # ==================== SIDEBAR ====================
 with st.sidebar:
+    display_logo(size=80)  # ← AJOUTER CETTE LIGNE
+    st.markdown("### 🔌 EHS Batna")
+    # ... le reste ne change pas
     st.markdown("### 🔌 EHS Batna")
     st.markdown("#### Monitoring Réseau")
     st.markdown("---")
@@ -678,4 +707,122 @@ elif st.session_state.current_page == "Réseau":
                 st.session_state[f"edit_reseau_{bureau_key}"] = True
                 st.rerun()
         
-        st
+        st.markdown("---")
+
+# ==================== PAGE ÉQUIPE ====================
+elif st.session_state.current_page == "Équipe" and st.session_state.user_can_manage_members:
+    st.markdown('<div class="header">', unsafe_allow_html=True)
+    st.title("👥 Gestion de l'équipe")
+    st.markdown("### Ajouter ou supprimer des membres")
+    st.markdown("🔐 *Seuls les administrateurs principaux (Djamel et Tarek) ont accès à cette page*")
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    st.markdown("#### 👤 Membres actuels")
+    
+    for username, user_data in st.session_state.users.items():
+        col1, col2, col3, col4 = st.columns([2, 2, 1, 1])
+        with col1:
+            st.markdown(f"**{user_data['nom']}**")
+        with col2:
+            st.markdown(f"*{user_data['grade']}*")
+        with col3:
+            st.markdown(f"`{username}`")
+        with col4:
+            if username not in ["djamel", "tarek"]:
+                if st.button("🗑️ Supprimer", key=f"del_user_{username}"):
+                    delete_user(username)
+                    st.toast(f"✅ {user_data['nom']} a été supprimé", icon="🗑️")
+                    st.rerun()
+        st.divider()
+    
+    st.markdown("---")
+    
+    st.markdown("#### ➕ Ajouter un membre")
+    
+    with st.form("add_user_form", clear_on_submit=True):
+        col_a1, col_a2 = st.columns(2)
+        with col_a1:
+            new_username = st.text_input("Nom d'utilisateur", placeholder="Ex: ahmed")
+            new_nom = st.text_input("Nom complet", placeholder="Ex: Mr. BENALI Ahmed")
+        with col_a2:
+            new_password = st.text_input("Mot de passe", type="password", placeholder="Mot de passe")
+            new_grade = st.text_input("Grade", placeholder="Ex: Technicien Réseau")
+        
+        new_role = st.selectbox("Rôle", ["technicien", "superviseur", "observateur"])
+        st.caption("📌 Rôles : technicien (peut modifier), superviseur (peut modifier), observateur (lecture seule)")
+        
+        if st.form_submit_button("➕ Ajouter le membre", type="primary", use_container_width=True):
+            if new_username and new_nom and new_password:
+                if new_username.lower() in st.session_state.users:
+                    st.error("❌ Ce nom d'utilisateur existe déjà")
+                else:
+                    add_user(new_username, new_password, new_nom, new_grade, new_role)
+                    st.toast(f"✅ {new_nom} a rejoint l'équipe !", icon="👥")
+                    st.rerun()
+            else:
+                st.error("❌ Veuillez remplir tous les champs")
+    
+    st.markdown("---")
+    st.info("💡 Les nouveaux membres pourront se connecter avec leur nom d'utilisateur et mot de passe")
+
+# ==================== PAGE RAPPORTS ====================
+elif st.session_state.current_page == "Rapports":
+    st.markdown('<div class="header">', unsafe_allow_html=True)
+    st.title("📄 Rapports")
+    st.markdown("### Export des données réseau")
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Logo pour le rapport
+    logo_base64 = get_logo_base64()
+    logo_html = ""
+    if logo_base64:
+        logo_html = f'<img src="data:image/png;base64,{logo_base64}" width="80" style="margin-bottom: 10px;">'
+    
+    rapport = f"""
+{logo_html}
+============================================================
+           RAPPORT DE MONITORING RÉSEAU - EHS BATNA
+============================================================
+Date : {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
+Généré par : {st.session_state.user_nom}
+
+ÉQUIPE TECHNIQUE
+----------------
+Suivi : Mr. MERZOUG Djamel (Ingénieur en Chef)
+Réalisation : Mr. BOUREGHDA Tarek (Technicien Supérieur)
+
+STATISTIQUES
+------------
+Total bureaux : {total_bureaux}
+Terminés : {termines}
+En cours : {en_cours}
+Non commencés : {non_commences}
+Progression : {progression:.0f}%
+
+DÉTAIL PAR BUREAU
+-----------------
+{df.to_string(index=False)}
+
+============================================================
+FIN DU RAPPORT
+"""
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.download_button("📥 Télécharger TXT", rapport, f"rapport_reseau_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt", use_container_width=True)
+    with col2:
+        st.download_button("📄 Télécharger PDF", rapport, f"rapport_reseau_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf", use_container_width=True)
+    with col3:
+        st.download_button("📝 Télécharger Word", rapport, f"rapport_reseau_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx", use_container_width=True)
+    
+    st.markdown("---")
+    st.info("💡 Astuce : Vous pouvez modifier les fichiers exportés selon vos besoins")
+
+# ==================== FOOTER ====================
+st.markdown(f"""
+<div class="footer">
+    EHS Batna - Service Informatique | Monitoring Réseau v6.0 | Mode {st.session_state.theme.upper()}
+    <br>
+    Connecté : {st.session_state.user_nom}
+</div>
+""", unsafe_allow_html=True)
