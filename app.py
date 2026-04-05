@@ -4,7 +4,6 @@ from datetime import datetime
 import os
 import base64
 
-
 # ==================== CONFIGURATION ====================
 st.set_page_config(
     page_title="EHS Batna - Monitoring Réseau",
@@ -45,14 +44,6 @@ def log_modification(df, idx):
         df.at[idx, 'DerniereModification'] = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
         df.at[idx, 'ModifiePar'] = st.session_state.user_username.upper()
     return df
-
-def get_bureau_index(df, bureau_num, bureau_nom):
-    """Trouve l'index d'un bureau par son numéro et nom"""
-    mask = (df["Bureau_Num"] == bureau_num) & (df["Bureau_Nom"] == bureau_nom)
-    indices = df[mask].index.tolist()
-    if indices:
-        return indices[0]
-    return None
 
 # ==================== FONCTIONS POUR LE LOGO ====================
 def get_logo_base64():
@@ -119,10 +110,6 @@ def delete_user(username):
 # ==================== INITIALISATION ====================
 if "df_reseau" not in st.session_state:
     st.session_state.df_reseau = load_data()
-if "edit_mode_id" not in st.session_state:
-    st.session_state.edit_mode_id = None
-if "delete_mode_id" not in st.session_state:
-    st.session_state.delete_mode_id = None
 if "current_page" not in st.session_state:
     st.session_state.current_page = "Dashboard"
 if "theme" not in st.session_state:
@@ -278,15 +265,12 @@ st.markdown("""
         margin-top: 30px;
         font-size: 0.8rem;
     }
-    
     </style>
 """, unsafe_allow_html=True)
 
 # ==================== SIDEBAR ====================
 with st.sidebar:
-    display_logo(size=80)  # ← AJOUTER CETTE LIGNE
-    st.markdown("### 🔌 EHS Batna")
-    # ... le reste ne change pas
+    display_logo(size=80)
     st.markdown("### 🔌 EHS Batna")
     st.markdown("#### Monitoring Réseau")
     st.markdown("---")
@@ -454,11 +438,14 @@ elif st.session_state.current_page == "Bureaux":
     if side_filter != "Tous":
         filtered_df = filtered_df[filtered_df["Side"] == side_filter]
     
+    filtered_df = filtered_df.reset_index(drop=True)
+    
     for idx, row in filtered_df.iterrows():
-        # Utiliser un identifiant unique pour le bureau
-        bureau_key = f"{row['Side']}_{row['Bureau_Num']}_{row['Bureau_Nom']}"
+        original_mask = (df["Side"] == row["Side"]) & (df["Bureau_Num"] == row["Bureau_Num"]) & (df["Bureau_Nom"] == row["Bureau_Nom"])
+        original_indices = df[original_mask].index.tolist()
+        original_idx = original_indices[0] if original_indices else None
         
-        if st.session_state.edit_mode_id == bureau_key:
+        if st.session_state.get(f"edit_mode_{idx}") == True:
             with st.container():
                 st.markdown(f"""
                 <div class="bureau-card" style="border-color: #f59e0b;">
@@ -466,39 +453,40 @@ elif st.session_state.current_page == "Bureaux":
                 </div>
                 """, unsafe_allow_html=True)
                 
-                col_e1, col_e2, col_e3, col_e4 = st.columns(4)
-                with col_e1:
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
                     new_side = st.selectbox("Side", ["🏛️ Administration", "🏥 Medical"], 
                                            index=0 if row['Side'] == "🏛️ Administration" else 1,
-                                           key=f"side_{bureau_key}")
-                with col_e2:
-                    new_num = st.text_input("Numéro", value=row['Bureau_Num'], key=f"num_{bureau_key}")
-                with col_e3:
-                    new_nom = st.text_input("Nom", value=row['Bureau_Nom'], key=f"nom_{bureau_key}")
-                with col_e4:
+                                           key=f"side_edit_{idx}")
+                with col2:
+                    new_num = st.text_input("Numéro", value=row['Bureau_Num'], key=f"num_edit_{idx}")
+                with col3:
+                    new_nom = st.text_input("Nom", value=row['Bureau_Nom'], key=f"nom_edit_{idx}")
+                with col4:
                     new_etage = st.selectbox("Étage", ["RDC", "1er", "2ème", "3ème"], 
                                             index=["RDC", "1er", "2ème", "3ème"].index(row['Etage']) if row['Etage'] in ["RDC", "1er", "2ème", "3ème"] else 0,
-                                            key=f"etage_{bureau_key}")
+                                            key=f"etage_edit_{idx}")
                 
-                col_b1, col_b2 = st.columns(2)
-                with col_b1:
-                    if st.button("💾 Sauvegarder", key=f"save_{bureau_key}", type="primary"):
-                        # Trouver l'index actuel du bureau
-                        current_idx = get_bureau_index(df, row['Bureau_Num'], row['Bureau_Nom'])
-                        if current_idx is not None:
-                            df.at[current_idx, 'Side'] = new_side
-                            df.at[current_idx, 'Bureau_Num'] = new_num
-                            df.at[current_idx, 'Bureau_Nom'] = new_nom
-                            df.at[current_idx, 'Etage'] = new_etage
-                            df = log_modification(df, current_idx)
+                col_btn1, col_btn2 = st.columns(2)
+                with col_btn1:
+                    if st.button("💾 Sauvegarder", key=f"save_{idx}", type="primary"):
+                        if original_idx is not None:
+                            df.at[original_idx, 'Side'] = str(new_side)
+                            df.at[original_idx, 'Bureau_Num'] = str(new_num)
+                            df.at[original_idx, 'Bureau_Nom'] = str(new_nom)
+                            df.at[original_idx, 'Etage'] = str(new_etage)
+                            df.at[original_idx, 'DerniereModification'] = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+                            df.at[original_idx, 'ModifiePar'] = st.session_state.user_username.upper()
                             save_data(df)
                             st.session_state.df_reseau = df
-                            st.session_state.edit_mode_id = None
-                            st.toast(f"✅ Bureau modifié par {st.session_state.user_username}", icon="✅")
+                            st.session_state[f"edit_mode_{idx}"] = False
+                            st.success("✅ Bureau modifié")
                             st.rerun()
-                with col_b2:
-                    if st.button("❌ Annuler", key=f"cancel_{bureau_key}"):
-                        st.session_state.edit_mode_id = None
+                        else:
+                            st.error("❌ Bureau non trouvé")
+                with col_btn2:
+                    if st.button("❌ Annuler", key=f"cancel_{idx}"):
+                        st.session_state[f"edit_mode_{idx}"] = False
                         st.rerun()
         else:
             st.markdown(f"""
@@ -517,40 +505,19 @@ elif st.session_state.current_page == "Bureaux":
             
             col_btn1, col_btn2 = st.columns(2)
             with col_btn1:
-                if st.button("✏️ Modifier", key=f"edit_{bureau_key}"):
-                    st.session_state.edit_mode_id = bureau_key
+                if st.button("✏️ Modifier", key=f"edit_{idx}"):
+                    st.session_state[f"edit_mode_{idx}"] = True
                     st.rerun()
             with col_btn2:
-                if st.button("🗑️ Supprimer", key=f"delete_{bureau_key}", type="secondary"):
-                    st.session_state.delete_mode_id = bureau_key
-                    st.rerun()
-        
-        if st.session_state.delete_mode_id == bureau_key:
-            st.markdown(f"""
-            <div class="bureau-card" style="border-color: #ef4444; background-color: #ef444420;">
-                <div>
-                    <strong style="color: #ef4444;">⚠️ Confirmation de suppression</strong>
-                    <br>
-                    Voulez-vous vraiment supprimer le bureau <strong>{row['Bureau_Num']} - {row['Bureau_Nom']}</strong> ?
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            col_conf1, col_conf2 = st.columns(2)
-            with col_conf1:
-                if st.button("✅ Oui, supprimer", key=f"confirm_delete_{bureau_key}", type="primary"):
-                    current_idx = get_bureau_index(df, row['Bureau_Num'], row['Bureau_Nom'])
-                    if current_idx is not None:
-                        df = df.drop(current_idx).reset_index(drop=True)
+                if st.button("🗑️ Supprimer", key=f"delete_{idx}", type="secondary"):
+                    if original_idx is not None:
+                        df = df.drop(original_idx).reset_index(drop=True)
                         save_data(df)
                         st.session_state.df_reseau = df
-                        st.session_state.delete_mode_id = None
-                        st.toast(f"🗑️ Bureau supprimé par {st.session_state.user_username}", icon="🗑️")
+                        st.success("🗑️ Bureau supprimé")
                         st.rerun()
-            with col_conf2:
-                if st.button("❌ Non, annuler", key=f"cancel_delete_{bureau_key}"):
-                    st.session_state.delete_mode_id = None
-                    st.rerun()
+                    else:
+                        st.error("❌ Bureau non trouvé")
         
         st.markdown("---")
     
@@ -558,25 +525,23 @@ elif st.session_state.current_page == "Bureaux":
     st.markdown("### ➕ Ajouter un nouveau bureau")
     
     with st.form(key="add_bureau_form", clear_on_submit=True):
-        col_add1, col_add2, col_add3, col_add4 = st.columns(4)
-        with col_add1:
-            new_side = st.selectbox("Side", ["🏛️ Administration", "🏥 Medical"])
-        with col_add2:
-            new_num = st.text_input("Numéro du bureau", placeholder="Ex: 106, 204...")
-        with col_add3:
-            new_nom = st.text_input("Nom du bureau", placeholder="Ex: Consultation 4...")
-        with col_add4:
-            new_etage = st.selectbox("Étage", ["RDC", "1er", "2ème", "3ème"])
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            new_side = st.selectbox("Side", ["🏛️ Administration", "🏥 Medical"], key="add_side")
+        with col2:
+            new_num = st.text_input("Numéro", placeholder="Ex: 106", key="add_num")
+        with col3:
+            new_nom = st.text_input("Nom", placeholder="Ex: Bureau Info", key="add_nom")
+        with col4:
+            new_etage = st.selectbox("Étage", ["RDC", "1er", "2ème", "3ème"], key="add_etage")
         
-        submitted = st.form_submit_button("➕ Ajouter le bureau", type="primary", use_container_width=True)
-        
-        if submitted:
+        if st.form_submit_button("➕ Ajouter", type="primary", use_container_width=True):
             if new_num and new_nom:
-                nouvelle_ligne = pd.DataFrame([{
-                    "Side": new_side,
-                    "Bureau_Num": new_num,
-                    "Bureau_Nom": new_nom,
-                    "Etage": new_etage,
+                new_row = pd.DataFrame([{
+                    "Side": str(new_side),
+                    "Bureau_Num": str(new_num),
+                    "Bureau_Nom": str(new_nom),
+                    "Etage": str(new_etage),
                     "Goulotte": "⏳ Non commencé",
                     "Cable": "⏳ Non tiré",
                     "Prise": "⏳ Non posée",
@@ -585,10 +550,10 @@ elif st.session_state.current_page == "Bureaux":
                     "DerniereModification": datetime.now().strftime('%d/%m/%Y %H:%M:%S'),
                     "ModifiePar": st.session_state.user_username.upper()
                 }])
-                df = pd.concat([df, nouvelle_ligne], ignore_index=True)
+                df = pd.concat([df, new_row], ignore_index=True)
                 save_data(df)
                 st.session_state.df_reseau = df
-                st.toast(f"✅ Bureau {new_num} - {new_nom} ajouté par {st.session_state.user_username}", icon="✅")
+                st.success(f"✅ Bureau {new_num} - {new_nom} ajouté")
                 st.rerun()
             else:
                 st.error("❌ Veuillez remplir tous les champs")
@@ -653,18 +618,21 @@ elif st.session_state.current_page == "Réseau":
                 col_b1, col_b2 = st.columns(2)
                 with col_b1:
                     if st.button("💾 Sauvegarder", key=f"save_reseau_{bureau_key}", type="primary"):
-                        current_idx = get_bureau_index(df, row['Bureau_Num'], row['Bureau_Nom'])
-                        if current_idx is not None:
+                        original_mask = (df["Side"] == row["Side"]) & (df["Bureau_Num"] == row["Bureau_Num"]) & (df["Bureau_Nom"] == row["Bureau_Nom"])
+                        original_indices = df[original_mask].index.tolist()
+                        if original_indices:
+                            current_idx = original_indices[0]
                             df.at[current_idx, 'Goulotte'] = new_goulotte
                             df.at[current_idx, 'Cable'] = new_cable
                             df.at[current_idx, 'Prise'] = new_prise
                             df.at[current_idx, 'Statut'] = new_statut
                             df.at[current_idx, 'Commentaire'] = new_commentaire
-                            df = log_modification(df, current_idx)
+                            df.at[current_idx, 'DerniereModification'] = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+                            df.at[current_idx, 'ModifiePar'] = st.session_state.user_username.upper()
                             save_data(df)
                             st.session_state.df_reseau = df
                             st.session_state[f"edit_reseau_{bureau_key}"] = False
-                            st.toast(f"✅ Réseau modifié par {st.session_state.user_username}", icon="✅")
+                            st.success("✅ Réseau modifié")
                             st.rerun()
                 with col_b2:
                     if st.button("❌ Annuler", key=f"cancel_reseau_{bureau_key}"):
@@ -782,7 +750,6 @@ elif st.session_state.current_page == "Rapports":
     st.markdown("### Export des données réseau")
     st.markdown('</div>', unsafe_allow_html=True)
     
-    # Logo pour le rapport HTML
     logo_base64 = get_logo_base64()
     logo_html = ""
     if logo_base64:
@@ -795,8 +762,6 @@ elif st.session_state.current_page == "Rapports":
         styles = getSampleStyleSheet()
         elements = []
         
-        # Ajouter le logo dans le PDF
-        logo_base64 = get_logo_base64()
         tmp_path = None
         if logo_base64:
             try:
@@ -805,7 +770,6 @@ elif st.session_state.current_page == "Rapports":
                 tmp_file.write(img_data)
                 tmp_file.close()
                 tmp_path = tmp_file.name
-                
                 img = Image(tmp_path, width=50, height=50)
                 elements.append(img)
             except Exception:
@@ -813,20 +777,17 @@ elif st.session_state.current_page == "Rapports":
         
         elements.append(Spacer(1, 0.2*inch))
         
-        # Titre
         title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=16, textColor=colors.HexColor('#667eea'))
         elements.append(Paragraph("RAPPORT DE MONITORING RÉSEAU - EHS BATNA", title_style))
         elements.append(Spacer(1, 0.2*inch))
         elements.append(Paragraph(f"Date : {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", styles['Normal']))
         elements.append(Spacer(1, 0.2*inch))
         
-        # Équipe
         elements.append(Paragraph("ÉQUIPE TECHNIQUE :", styles['Heading4']))
         elements.append(Paragraph("- Suivi : Mr. MERZOUG Djamel (Ingénieur en Chef)", styles['Normal']))
         elements.append(Paragraph("- Réalisation : Mr. BOUREGHDA Tarek (Technicien Supérieur)", styles['Normal']))
         elements.append(Spacer(1, 0.2*inch))
         
-        # Statistiques
         elements.append(Paragraph("STATISTIQUES :", styles['Heading4']))
         elements.append(Paragraph(f"- Total bureaux : {total_bureaux}", styles['Normal']))
         elements.append(Paragraph(f"- Terminés : {termines}", styles['Normal']))
@@ -835,7 +796,6 @@ elif st.session_state.current_page == "Rapports":
         elements.append(Paragraph(f"- Progression : {progression:.0f}%", styles['Normal']))
         elements.append(Spacer(1, 0.2*inch))
         
-        # Tableau
         table_data = [["Side", "Bureau", "Nom", "Étage", "Goulotte", "Câble", "Prise", "Statut"]]
         for _, row in df.iterrows():
             table_data.append([
@@ -857,7 +817,6 @@ elif st.session_state.current_page == "Rapports":
         doc.build(elements)
         buffer.seek(0)
         
-        # Nettoyer le fichier temporaire
         if tmp_path and os.path.exists(tmp_path):
             try:
                 os.unlink(tmp_path)
@@ -870,8 +829,6 @@ elif st.session_state.current_page == "Rapports":
     def create_word():
         doc = Document()
         
-        # Ajouter le logo dans le Word
-        logo_base64 = get_logo_base64()
         if logo_base64:
             try:
                 img_data = base64.b64decode(logo_base64)
@@ -972,3 +929,12 @@ FIN DU RAPPORT
     
     st.markdown("---")
     st.info("💡 Les fichiers PDF et Word sont de vrais documents ouvrables normalement.")
+
+# ==================== FOOTER ====================
+st.markdown(f"""
+<div class="footer">
+    EHS Batna - Service Informatique | Monitoring Réseau v6.0 | Mode {st.session_state.theme.upper()}
+    <br>
+    Connecté : {st.session_state.user_nom}
+</div>
+""", unsafe_allow_html=True)
