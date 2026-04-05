@@ -787,51 +787,83 @@ elif st.session_state.current_page == "Rapports":
     
     # ==================== CRÉER UN VRAI PDF ====================
     def create_pdf():
-        buffer = BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=letter)
-        styles = getSampleStyleSheet()
-        elements = []
-        
-        title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=16, textColor=colors.HexColor('#667eea'))
-        elements.append(Paragraph("RAPPORT DE MONITORING RÉSEAU - EHS BATNA", title_style))
-        elements.append(Spacer(1, 0.2*inch))
-        elements.append(Paragraph(f"Date : {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", styles['Normal']))
-        elements.append(Spacer(1, 0.2*inch))
-        
-        elements.append(Paragraph("ÉQUIPE TECHNIQUE :", styles['Heading4']))
-        elements.append(Paragraph("- Suivi : Mr. MERZOUG Djamel (Ingénieur en Chef)", styles['Normal']))
-        elements.append(Paragraph("- Réalisation : Mr. BOUREGHDA Tarek (Technicien Supérieur)", styles['Normal']))
-        elements.append(Spacer(1, 0.2*inch))
-        
-        elements.append(Paragraph("STATISTIQUES :", styles['Heading4']))
-        elements.append(Paragraph(f"- Total bureaux : {total_bureaux}", styles['Normal']))
-        elements.append(Paragraph(f"- Terminés : {termines}", styles['Normal']))
-        elements.append(Paragraph(f"- En cours : {en_cours}", styles['Normal']))
-        elements.append(Paragraph(f"- Non commencés : {non_commences}", styles['Normal']))
-        elements.append(Paragraph(f"- Progression : {progression:.0f}%", styles['Normal']))
-        elements.append(Spacer(1, 0.2*inch))
-        
-        table_data = [["Side", "Bureau", "Nom", "Étage", "Goulotte", "Câble", "Prise", "Statut"]]
-        for _, row in df.iterrows():
-            table_data.append([
-                str(row['Side']), str(row['Bureau_Num']), str(row['Bureau_Nom']), str(row['Etage']),
-                str(row['Goulotte']), str(row['Cable']), str(row['Prise']), str(row['Statut'])
-            ])
-        
-        table = Table(table_data)
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#667eea')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, -1), 8),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black)
-        ]))
-        elements.append(table)
-        
-        doc.build(elements)
-        buffer.seek(0)
-        return buffer
+    from reportlab.lib.pagesizes import letter
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
+    from reportlab.lib import colors
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    import tempfile
+    
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter)
+    styles = getSampleStyleSheet()
+    elements = []
+    
+    # ==================== AJOUTER LE LOGO DANS LE PDF ====================
+    logo_base64 = get_logo_base64()
+    if logo_base64:
+        try:
+            # Décoder le base64 et sauvegarder temporairement
+            img_data = base64.b64decode(logo_base64)
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
+                tmp.write(img_data)
+                tmp_path = tmp.name
+            
+            # Ajouter l'image au PDF
+            img = Image(tmp_path, width=50, height=50)
+            elements.append(img)
+            
+            # Nettoyer le fichier temporaire
+            os.unlink(tmp_path)
+        except Exception as e:
+            st.warning(f"Logo non ajouté au PDF : {e}")
+    
+    elements.append(Spacer(1, 0.2*inch))
+    
+    # Titre
+    title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=16, textColor=colors.HexColor('#667eea'))
+    elements.append(Paragraph("RAPPORT DE MONITORING RÉSEAU - EHS BATNA", title_style))
+    elements.append(Spacer(1, 0.2*inch))
+    elements.append(Paragraph(f"Date : {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", styles['Normal']))
+    elements.append(Spacer(1, 0.2*inch))
+    
+    # Équipe
+    elements.append(Paragraph("ÉQUIPE TECHNIQUE :", styles['Heading4']))
+    elements.append(Paragraph("- Suivi : Mr. MERZOUG Djamel (Ingénieur en Chef)", styles['Normal']))
+    elements.append(Paragraph("- Réalisation : Mr. BOUREGHDA Tarek (Technicien Supérieur)", styles['Normal']))
+    elements.append(Spacer(1, 0.2*inch))
+    
+    # Statistiques
+    elements.append(Paragraph("STATISTIQUES :", styles['Heading4']))
+    elements.append(Paragraph(f"- Total bureaux : {total_bureaux}", styles['Normal']))
+    elements.append(Paragraph(f"- Terminés : {termines}", styles['Normal']))
+    elements.append(Paragraph(f"- En cours : {en_cours}", styles['Normal']))
+    elements.append(Paragraph(f"- Non commencés : {non_commences}", styles['Normal']))
+    elements.append(Paragraph(f"- Progression : {progression:.0f}%", styles['Normal']))
+    elements.append(Spacer(1, 0.2*inch))
+    
+    # Tableau
+    table_data = [["Side", "Bureau", "Nom", "Étage", "Goulotte", "Câble", "Prise", "Statut"]]
+    for _, row in df.iterrows():
+        table_data.append([
+            str(row['Side']), str(row['Bureau_Num']), str(row['Bureau_Nom']), str(row['Etage']),
+            str(row['Goulotte']), str(row['Cable']), str(row['Prise']), str(row['Statut'])
+        ])
+    
+    table = Table(table_data)
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#667eea')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+    ]))
+    elements.append(table)
+    
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer
     
     # ==================== CRÉER UN VRAI WORD ====================
     def create_word():
