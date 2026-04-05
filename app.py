@@ -16,13 +16,14 @@ st.set_page_config(
 def load_data():
     if os.path.exists("reseau_data.csv"):
         df = pd.read_csv("reseau_data.csv")
-        colonnes_requises = ["Side", "Bureau_Num", "Bureau_Nom", "Etage", "Goulotte", "Cable", "Prise", "Statut", "Commentaire", "DerniereModification", "ModifiePar"]
+        colonnes_requises = ["ID", "Side", "Bureau_Num", "Bureau_Nom", "Etage", "Goulotte", "Cable", "Prise", "Statut", "Commentaire", "DerniereModification", "ModifiePar"]
         for col in colonnes_requises:
             if col not in df.columns:
                 df[col] = ""
         return df
     
     return pd.DataFrame({
+        "ID": [1, 2, 3, 4, 5],
         "Side": ["🏛️ Administration", "🏛️ Administration", "🏛️ Administration", "🏥 Medical", "🏥 Medical"],
         "Bureau_Num": ["101", "102", "103", "201", "202"],
         "Bureau_Nom": ["Direction", "Comptabilité", "RH", "Consultation 1", "Consultation 2"],
@@ -35,7 +36,6 @@ def load_data():
         "DerniereModification": [datetime.now().strftime('%d/%m/%Y %H:%M'), "", "", "", ""],
         "ModifiePar": ["BOUREGHDA T.", "", "", "", ""]
     })
-
 def save_data(df):
     df.to_csv("reseau_data.csv", index=False)
 
@@ -441,11 +441,9 @@ elif st.session_state.current_page == "Bureaux":
     filtered_df = filtered_df.reset_index(drop=True)
     
     for idx, row in filtered_df.iterrows():
-        original_mask = (df["Side"] == row["Side"]) & (df["Bureau_Num"] == row["Bureau_Num"]) & (df["Bureau_Nom"] == row["Bureau_Nom"])
-        original_indices = df[original_mask].index.tolist()
-        original_idx = original_indices[0] if original_indices else None
+        bureau_id = row['ID']  # L'ID ne change jamais !
         
-        if st.session_state.get(f"edit_mode_{idx}") == True:
+        if st.session_state.get(f"edit_mode_{bureau_id}") == True:
             with st.container():
                 st.markdown(f"""
                 <div class="bureau-card" style="border-color: #f59e0b;">
@@ -457,20 +455,23 @@ elif st.session_state.current_page == "Bureaux":
                 with col1:
                     new_side = st.selectbox("Side", ["🏛️ Administration", "🏥 Medical"], 
                                            index=0 if row['Side'] == "🏛️ Administration" else 1,
-                                           key=f"side_edit_{idx}")
+                                           key=f"side_edit_{bureau_id}")
                 with col2:
-                    new_num = st.text_input("Numéro", value=row['Bureau_Num'], key=f"num_edit_{idx}")
+                    new_num = st.text_input("Numéro", value=row['Bureau_Num'], key=f"num_edit_{bureau_id}")
                 with col3:
-                    new_nom = st.text_input("Nom", value=row['Bureau_Nom'], key=f"nom_edit_{idx}")
+                    new_nom = st.text_input("Nom", value=row['Bureau_Nom'], key=f"nom_edit_{bureau_id}")
                 with col4:
                     new_etage = st.selectbox("Étage", ["RDC", "1er", "2ème", "3ème"], 
                                             index=["RDC", "1er", "2ème", "3ème"].index(row['Etage']) if row['Etage'] in ["RDC", "1er", "2ème", "3ème"] else 0,
-                                            key=f"etage_edit_{idx}")
+                                            key=f"etage_edit_{bureau_id}")
                 
                 col_btn1, col_btn2 = st.columns(2)
                 with col_btn1:
-                    if st.button("💾 Sauvegarder", key=f"save_{idx}", type="primary"):
-                        if original_idx is not None:
+                    if st.button("💾 Sauvegarder", key=f"save_{bureau_id}", type="primary"):
+                        # Trouver l'index par ID (plus fiable)
+                        idx_in_df = df[df["ID"] == bureau_id].index
+                        if len(idx_in_df) > 0:
+                            original_idx = idx_in_df[0]
                             df.at[original_idx, 'Side'] = str(new_side)
                             df.at[original_idx, 'Bureau_Num'] = str(new_num)
                             df.at[original_idx, 'Bureau_Nom'] = str(new_nom)
@@ -479,14 +480,14 @@ elif st.session_state.current_page == "Bureaux":
                             df.at[original_idx, 'ModifiePar'] = st.session_state.user_username.upper()
                             save_data(df)
                             st.session_state.df_reseau = df
-                            st.session_state[f"edit_mode_{idx}"] = False
+                            st.session_state[f"edit_mode_{bureau_id}"] = False
                             st.success("✅ Bureau modifié")
                             st.rerun()
                         else:
                             st.error("❌ Bureau non trouvé")
                 with col_btn2:
-                    if st.button("❌ Annuler", key=f"cancel_{idx}"):
-                        st.session_state[f"edit_mode_{idx}"] = False
+                    if st.button("❌ Annuler", key=f"cancel_{bureau_id}"):
+                        st.session_state[f"edit_mode_{bureau_id}"] = False
                         st.rerun()
         else:
             st.markdown(f"""
@@ -505,23 +506,22 @@ elif st.session_state.current_page == "Bureaux":
             
             col_btn1, col_btn2 = st.columns(2)
             with col_btn1:
-                if st.button("✏️ Modifier", key=f"edit_{idx}"):
-                    st.session_state[f"edit_mode_{idx}"] = True
+                if st.button("✏️ Modifier", key=f"edit_{bureau_id}"):
+                    st.session_state[f"edit_mode_{bureau_id}"] = True
                     st.rerun()
             with col_btn2:
-                if st.button("🗑️ Supprimer", key=f"delete_{idx}", type="secondary"):
-                    if original_idx is not None:
-                        df = df.drop(original_idx).reset_index(drop=True)
+                if st.button("🗑️ Supprimer", key=f"delete_{bureau_id}", type="secondary"):
+                    idx_in_df = df[df["ID"] == bureau_id].index
+                    if len(idx_in_df) > 0:
+                        df = df.drop(idx_in_df[0]).reset_index(drop=True)
                         save_data(df)
                         st.session_state.df_reseau = df
                         st.success("🗑️ Bureau supprimé")
                         st.rerun()
-                    else:
-                        st.error("❌ Bureau non trouvé")
         
         st.markdown("---")
     
-    # Ajouter un bureau
+    # Ajouter un bureau (avec un nouvel ID)
     st.markdown("### ➕ Ajouter un nouveau bureau")
     
     with st.form(key="add_bureau_form", clear_on_submit=True):
@@ -537,7 +537,10 @@ elif st.session_state.current_page == "Bureaux":
         
         if st.form_submit_button("➕ Ajouter", type="primary", use_container_width=True):
             if new_num and new_nom:
+                # Calculer le prochain ID
+                next_id = df["ID"].max() + 1 if len(df) > 0 else 1
                 new_row = pd.DataFrame([{
+                    "ID": next_id,
                     "Side": str(new_side),
                     "Bureau_Num": str(new_num),
                     "Bureau_Nom": str(new_nom),
